@@ -1,0 +1,55 @@
+services:
+  # ── NestJS API ──────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: qatrack-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-supersecret_change_me_in_production}
+      ALLOWED_ORIGINS: http://localhost:3000,http://web:3000
+      JIRA_HOST: ${JIRA_HOST:-}
+      JIRA_DOMAIN: ${JIRA_DOMAIN:-}
+      JIRA_CLIENT_ID: ${JIRA_CLIENT_ID:-}
+      JIRA_CLIENT_SECRET: ${JIRA_CLIENT_SECRET:-}
+      JIRA_CALLBACK_URL: ${JIRA_CALLBACK_URL:-http://localhost:3001/jira/callback}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - qatrack-net
+
+  # ── Next.js Web App ─────────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+    container_name: qatrack-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+      # This is used server-side (from Next.js server → API container)
+      API_URL: http://api:3001
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - qatrack-net
+
+networks:
+  qatrack-net:
+    driver: bridge
