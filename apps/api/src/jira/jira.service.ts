@@ -17,6 +17,11 @@ import {
   Project,
 } from '@qatrack/shared-types';
 
+import * as fs from 'fs';
+import * as path from 'path';
+
+const STORAGE_PATH = path.join(process.cwd(), 'data', 'jira_storage.json');
+
 // Per-user Jira session: OAuth tokens or Basic Auth credentials + site info
 export interface JiraSession {
   authType: 'oauth' | 'basic';
@@ -28,6 +33,19 @@ export interface JiraSession {
   basicAuth?: string;
 }
 
+export interface DefectRecord {
+  id: string;
+  jiraKey: string;
+  summary: string;
+  description?: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  status: 'OPEN' | 'IN_PROGRESS' | 'READY_FOR_RETEST' | 'CLOSED';
+  assignee?: string;
+  projectKey: string;
+  createdAt: string;
+  linkedTestCaseId?: string;
+}
+
 @Injectable()
 export class JiraService {
   // In-memory stores keyed by QATrack user ID
@@ -37,10 +55,138 @@ export class JiraService {
   private userProjects   = new Map<string, Project[]>();
   private testCases      = new Map<string, TestCase[]>();
   private traceLinks     = new Map<string, TraceabilityLink[]>();
+  private defects        = new Map<string, DefectRecord[]>();
   private users          = new Map<
     string,
     { id: string; email: string; name: string; role: UserRole; jiraAccountId: string }
   >();
+
+  constructor() {
+    this.loadFromDisk();
+  }
+
+  public saveToDisk() {
+    try {
+      const dir = path.dirname(STORAGE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        connections: Array.from(this.connections.entries()),
+        sessions: Array.from(this.sessions.entries()),
+        requirements: Array.from(this.requirements.entries()),
+        userProjects: Array.from(this.userProjects.entries()),
+        testCases: Array.from(this.testCases.entries()),
+        traceLinks: Array.from(this.traceLinks.entries()),
+        defects: Array.from(this.defects.entries()),
+        users: Array.from(this.users.entries()),
+      };
+      fs.writeFileSync(STORAGE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err: any) {
+      console.warn('[JiraService] Failed to save state to disk:', err.message);
+    }
+  }
+
+  private loadFromDisk() {
+    try {
+      if (fs.existsSync(STORAGE_PATH)) {
+        const raw = fs.readFileSync(STORAGE_PATH, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data.connections) this.connections = new Map(data.connections);
+        if (data.sessions) this.sessions = new Map(data.sessions);
+        if (data.requirements) this.requirements = new Map(data.requirements);
+        if (data.userProjects) this.userProjects = new Map(data.userProjects);
+        if (data.testCases) this.testCases = new Map(data.testCases);
+        if (data.traceLinks) this.traceLinks = new Map(data.traceLinks);
+        if (data.defects) this.defects = new Map(data.defects);
+        if (data.users) this.users = new Map(data.users);
+        console.log('[JiraService] Restored state from disk');
+      }
+    } catch (err: any) {
+      console.warn('[JiraService] Failed to load state from disk:', err.message);
+    }
+  }
+
+  /** Returns all stored defects for a user */
+  getDefects(userId: string): DefectRecord[] {
+    return this.defects.get(userId) || [];
+  }
+
+  /** Creates and persists a defect record locally, attempting Jira post if connected */
+  async createDefect(
+    userId: string,
+    dto: {
+      summary: string;
+      description?: string;
+      severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+      assignee?: string;
+      projectKey?: string;
+      linkedTestCaseId?: string;
+    },
+  ): Promise<DefectRecord> {
+    const list = this.defects.get(userId) || [];
+    const projKey = dto.projectKey || this.getActiveProjectKey(userId) || 'QAT';
+    
+    // Attempt real Jira issue post if user has session
+    let jiraKey = '';
+    let jiraId = '';
+    try {
+      const created = await this.createJiraIssue(userId, {
+        projectKey: projKey,
+        summary: dto.summary,
+        description: dto.description,
+        issueTypeName: 'Bug',
+      });
+      if (created?.key) {
+        jiraKey = created.key;
+        jiraId = created.id;
+      }
+    } catch {
+      // Ignore Jira errors, fallback to local defect record
+    }
+
+    if (!jiraKey) {
+      const nextNum = 100 + list.length + 1;
+      jiraKey = `${projKey}-${nextNum}`;
+      jiraId = `local-def-${Date.now()}`;
+    }
+
+    // Check if duplicate jiraKey already exists in list (avoid duplicate entries)
+    const existingIdx = list.findIndex((d) => d.jiraKey === jiraKey);
+    const newRecord: DefectRecord = {
+      id: jiraId,
+      jiraKey,
+      summary: dto.summary,
+      description: dto.description,
+      severity: dto.severity || 'HIGH',
+      status: 'OPEN',
+      assignee: dto.assignee,
+      projectKey: projKey,
+      createdAt: new Date().toISOString(),
+      linkedTestCaseId: dto.linkedTestCaseId,
+    };
+
+    if (existingIdx >= 0) {
+      list[existingIdx] = newRecord;
+    } else {
+      list.unshift(newRecord);
+    }
+
+    this.defects.set(userId, list);
+    this.saveToDisk();
+    return newRecord;
+  }
+
+  /** Updates the status of a stored defect */
+  updateDefectStatus(userId: string, jiraKey: string, status: DefectRecord['status']): DefectRecord | null {
+    const list = this.defects.get(userId) || [];
+    const idx = list.findIndex((d) => d.jiraKey === jiraKey);
+    if (idx < 0) return null;
+    list[idx] = { ...list[idx], status };
+    this.defects.set(userId, list);
+    this.saveToDisk();
+    return list[idx];
+  }
 
   // ── User management ────────────────────────────────────────────────────────
 
@@ -569,6 +715,194 @@ export class JiraService {
     };
     all.push(tc);
     this.testCases.set(userId, all);
+    this.saveToDisk();
     return tc;
+  }
+
+  // ── Active Project & Real Jira Issue Creation ─────────────────────────────
+
+  getActiveProjectKey(userId: string): string | null {
+    const projects = this.userProjects.get(userId) || [];
+    if (projects.length > 0) {
+      return projects[0].key;
+    }
+    const reqs = this.requirements.get(userId) || [];
+    if (reqs.length > 0) {
+      const match = reqs[0].jiraIssueKey.match(/^([A-Z0-9]+)-/);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  /** Posts and creates a real issue in the user's Jira account via Jira REST API */
+  async createJiraIssue(
+    userId: string,
+    dto: {
+      projectKey: string;
+      summary: string;
+      description?: string;
+      issueTypeName?: string;
+      parentKey?: string;
+    },
+  ): Promise<{ id: string; key: string } | null> {
+    try {
+      const session = this.sessions.get(userId);
+      if (!session) return null;
+
+      const isBasic = session.authType === 'basic';
+      const baseUrl = isBasic
+        ? session.jiraHost
+        : `https://api.atlassian.com/ex/jira/${session.cloudId}`;
+      const authHeader = isBasic
+        ? session.basicAuth!
+        : `Bearer ${session.accessToken}`;
+
+      const body = {
+        fields: {
+          project: { key: dto.projectKey },
+          summary: dto.summary,
+          issuetype: { name: dto.issueTypeName || 'Task' },
+          ...(dto.description
+            ? {
+                description: {
+                  type: 'doc',
+                  version: 1,
+                  content: [
+                    {
+                      type: 'paragraph',
+                      content: [{ type: 'text', text: dto.description }],
+                    },
+                  ],
+                },
+              }
+            : {}),
+          ...(dto.parentKey ? { parent: { key: dto.parentKey } } : {}),
+        },
+      };
+
+      console.log(`[JiraService] Creating Jira issue "${dto.summary}" in project ${dto.projectKey}...`);
+
+      let res = await fetch(`${baseUrl}/rest/api/3/issue`, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        // Fallback for Jira v2 API or different schema
+        const v2Body = {
+          fields: {
+            project: { key: dto.projectKey },
+            summary: dto.summary,
+            description: dto.description || '',
+            issuetype: { name: dto.issueTypeName || 'Task' },
+          },
+        };
+        res = await fetch(`${baseUrl}/rest/api/2/issue`, {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(v2Body),
+        });
+      }
+
+      if (res.ok) {
+        const data: any = await res.json();
+        console.log(`[JiraService] Successfully created Jira issue ${data.key} for user ${userId}`);
+        // Store defect locally for the Defects page
+        const defectList = this.defects.get(userId) || [];
+        defectList.unshift({
+          id: data.id,
+          jiraKey: data.key,
+          summary: dto.summary,
+          description: dto.description,
+          severity: 'HIGH',
+          status: 'OPEN',
+          projectKey: dto.projectKey,
+          createdAt: new Date().toISOString(),
+        });
+        this.defects.set(userId, defectList);
+        this.saveToDisk();
+        return { id: data.id, key: data.key };
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[JiraService] Jira issue creation failed (${res.status}): ${errText}`);
+      }
+    } catch (err: any) {
+      console.warn(`[JiraService] Error creating issue in Jira:`, err.message || err);
+    }
+    return null;
+  }
+
+  /** Adds an execution result comment to a Jira issue */
+  async addJiraIssueComment(
+    userId: string,
+    issueKey: string,
+    commentText: string,
+  ): Promise<boolean> {
+    try {
+      const session = this.sessions.get(userId);
+      if (!session) return false;
+
+      const isBasic = session.authType === 'basic';
+      const baseUrl = isBasic
+        ? session.jiraHost
+        : `https://api.atlassian.com/ex/jira/${session.cloudId}`;
+      const authHeader = isBasic
+        ? session.basicAuth!
+        : `Bearer ${session.accessToken}`;
+
+      const body = {
+        body: {
+          type: 'doc',
+          version: 1,
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: commentText }],
+            },
+          ],
+        },
+      };
+
+      let res = await fetch(`${baseUrl}/rest/api/3/issue/${issueKey}/comment`, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const v2Body = { body: commentText };
+        res = await fetch(`${baseUrl}/rest/api/2/issue/${issueKey}/comment`, {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(v2Body),
+        });
+      }
+
+      if (res.ok) {
+        console.log(`[JiraService] Added execution comment to Jira issue ${issueKey}`);
+        this.saveToDisk();
+        return true;
+      }
+    } catch (err: any) {
+      console.warn(`[JiraService] Error adding comment to Jira issue ${issueKey}:`, err.message || err);
+    }
+    return false;
   }
 }

@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { TestCase } from '@qatrack/shared-types';
 import { JiraService } from '../jira/jira.service';
 import { TestCasesService } from '../test-cases/test-cases.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export type PlanEnvironment = 'Prod' | 'UAT' | 'SIT' | 'Dev';
 export type PlanStatus = 'Not Started' | 'In Progress' | 'Completed';
@@ -41,6 +43,8 @@ export interface UpdateTestPlanDto {
   suiteIds?: string[];
 }
 
+const STORAGE_PATH = path.join(process.cwd(), 'data', 'test_plans_storage.json');
+
 @Injectable()
 export class TestPlansService {
   // Keyed by userId -> TestPlan[]
@@ -49,13 +53,62 @@ export class TestPlansService {
   constructor(
     private readonly jiraService: JiraService,
     private readonly testCasesService: TestCasesService,
-  ) {}
+  ) {
+    this.loadFromDisk();
+  }
+
+  private saveToDisk() {
+    try {
+      const dir = path.dirname(STORAGE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        userPlans: Array.from(this.userPlans.entries()),
+      };
+      fs.writeFileSync(STORAGE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+      console.log('[TestPlansService] Saved test plans state to disk');
+    } catch (err: any) {
+      console.warn('[TestPlansService] Failed to save test plans state to disk:', err.message);
+    }
+  }
+
+  private loadFromDisk() {
+    try {
+      if (fs.existsSync(STORAGE_PATH)) {
+        const raw = fs.readFileSync(STORAGE_PATH, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data.userPlans) {
+          this.userPlans = new Map(data.userPlans);
+        }
+        console.log(`[TestPlansService] Restored ${this.userPlans.size} user plan entry set(s) from disk`);
+      }
+    } catch (err: any) {
+      console.warn('[TestPlansService] Failed to load test plans state from disk:', err.message);
+    }
+  }
 
   private getOrCreateUserPlans(userId: string): TestPlan[] {
-    if (!this.userPlans.has(userId)) {
-      this.userPlans.set(userId, []);
+    if (this.userPlans.has(userId)) {
+      return this.userPlans.get(userId)!;
     }
-    return this.userPlans.get(userId)!;
+
+    // Fallback search: if this exact userId doesn't have plans yet,
+    // check if there are plans under another key (e.g. previous session or single user mode)
+    if (this.userPlans.size > 0) {
+      for (const [existingKey, plans] of this.userPlans.entries()) {
+        if (plans.length > 0) {
+          // Adopt existing plans for the new logged-in user ID
+          this.userPlans.set(userId, plans);
+          this.saveToDisk();
+          return plans;
+        }
+      }
+    }
+
+    const initialPlans: TestPlan[] = [];
+    this.userPlans.set(userId, initialPlans);
+    return initialPlans;
   }
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -97,6 +150,7 @@ export class TestPlansService {
 
     plans.unshift(newPlan);
     this.userPlans.set(userId, plans);
+    this.saveToDisk();
     return newPlan;
   }
 
@@ -116,6 +170,8 @@ export class TestPlansService {
     }
 
     plans[idx] = { ...plans[idx], ...dto, testCaseIds };
+    this.userPlans.set(userId, plans);
+    this.saveToDisk();
     return plans[idx];
   }
 
@@ -124,6 +180,8 @@ export class TestPlansService {
     const idx = plans.findIndex((p) => p.id === planId);
     if (idx === -1) throw new NotFoundException(`Test plan "${planId}" not found`);
     plans.splice(idx, 1);
+    this.userPlans.set(userId, plans);
+    this.saveToDisk();
   }
 
   // ── Test case result update ───────────────────────────────────────────────
@@ -142,7 +200,7 @@ export class TestPlansService {
         lastResult: result as any,
       });
     } catch {
-      // ignore if not found in suites (plan may have its own test cases)
+      // ignore if not found in suites
     }
 
     // Recalculate status based on all test cases
@@ -158,6 +216,7 @@ export class TestPlansService {
       plan.status = 'In Progress';
     }
 
+    this.saveToDisk();
     return plan;
   }
 

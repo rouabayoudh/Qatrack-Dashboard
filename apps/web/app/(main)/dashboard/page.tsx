@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
   Requirement,
@@ -10,6 +10,8 @@ import type {
   CoverageSummary,
   ComponentCoverage,
   Project,
+  ProductDashboardStats,
+  JiraConnectionStatus,
 } from '@qatrack/shared-types';
 import {
   fetchCurrentUser,
@@ -21,49 +23,18 @@ import {
   fetchCoverageByComponent,
   fetchProjects,
   fetchJiraStatus,
+  fetchProductStats,
   fetchApi,
   type CurrentUser,
 } from '@/lib/api';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
-import { RecentExecutionsTable } from './components/RecentExecutionsTable';
-import { CoverageByComponent } from './components/CoverageByComponent';
-import { CriticalDefectsTable } from './components/CriticalDefectsTable';
+import { ProjectLevelDashboard } from './components/ProjectLevelDashboard';
+import { ProductLevelDashboard } from './components/ProductLevelDashboard';
 import { EditWidgetsModal, DEFAULT_WIDGETS, type WidgetConfig } from './components/EditWidgetsModal';
+import { ProductEditWidgetsModal, DEFAULT_PRODUCT_WIDGETS, type ProductWidgetConfig } from './components/ProductEditWidgetsModal';
 
 const CLOSED_STATUSES = new Set(['Done', 'Closed', 'Resolved']);
-
-function computeKpiStats(
-  requirements: Requirement[],
-  coverageSummary: CoverageSummary | null,
-  activeExecutions: ActiveExecution[],
-): KpiStats {
-  const bugs = requirements.filter((r) => r.type === 'BUG');
-  const openBugs = bugs.filter((b) => !CLOSED_STATUSES.has(b.status ?? ''));
-
-  return {
-    totalRequirements: requirements.length,
-    newThisWeek: 0,
-    openDefectsCount: openBugs.length,
-    criticalDefectsCount: 0,
-    coveragePercent: coverageSummary?.coveragePercent ?? 0,
-    coverageChange: coverageSummary?.changeFromLastWeek ?? 0,
-    activeExecutionsCount: activeExecutions.length,
-    activeRunners: activeExecutions.map((e) => e.runnerInitials),
-  };
-}
-
-function getOpenDefects(requirements: Requirement[], selectedProjectKey?: string): Requirement[] {
-  const projectFiltered = selectedProjectKey
-    ? requirements.filter((r) => r.jiraIssueKey.startsWith(`${selectedProjectKey}-`))
-    : requirements;
-
-  const list = projectFiltered.length > 0 ? projectFiltered : requirements;
-
-  return list
-    .filter((r) => r.type === 'BUG' && !CLOSED_STATUSES.has(r.status ?? ''))
-    .slice(0, 10);
-}
 
 function DashboardContent() {
   const router = useRouter();
@@ -76,25 +47,72 @@ function DashboardContent() {
   const [coverageSummary, setCoverageSummary] = useState<CoverageSummary | null>(null);
   const [coverageByComponent, setCoverageByComponent] = useState<ComponentCoverage[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [productStats, setProductStats] = useState<ProductDashboardStats | null>(null);
+
   const [selectedProjectKey, setSelectedProjectKey] = useState<string>('');
-  const [selectedRelease, setSelectedRelease] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState('Never');
+  const [lastSynced, setLastSynced] = useState('5 mins ago');
   const [showSyncSuccess, setShowSyncSuccess] = useState(false);
 
+  // Widget configurations
   const [widgets, setWidgets] = useState<WidgetConfig>(DEFAULT_WIDGETS);
+  const [productWidgets, setProductWidgets] = useState<ProductWidgetConfig>(DEFAULT_PRODUCT_WIDGETS);
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isProductEditModalOpen, setIsProductEditModalOpen] = useState(false);
+
+  // Derive dynamic product & project options from real synced Jira data
+  const productOptions = useMemo(() => {
+    const list: { key: string; name: string }[] = [];
+
+    // Add real synced Jira projects
+    for (const p of projects) {
+      list.push({ key: p.key, name: p.name });
+    }
+
+    // Add distinct Jira components from synced requirements
+    const compNames = Array.from(
+      new Set(requirements.map((r) => r.component).filter(Boolean)),
+    ) as string[];
+
+    for (const comp of compNames) {
+      if (!list.some((item) => item.name === comp || item.key === comp)) {
+        list.push({ key: comp, name: comp });
+      }
+    }
+
+    return list;
+  }, [projects, requirements]);
+
+  const [selectedView, setSelectedView] = useState<string>('all');
+  const [selectedProduct, setSelectedProduct] = useState<{ key: string; name: string }>(
+    productOptions[0] || { key: 'all', name: 'All products (overview)' },
+  );
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+
+  // Synchronize default selected product when productOptions update
+  useEffect(() => {
+    if (productOptions.length > 0 && selectedView !== 'all') {
+      const found = productOptions.find((p) => p.key === selectedView);
+      if (found) {
+        setSelectedProduct(found);
+      } else if (productOptions[0]) {
+        setSelectedProduct(productOptions[0]);
+      }
+    }
+  }, [productOptions, selectedView]);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('qatrack_dashboard_widgets');
-      if (saved) {
-        setWidgets({ ...DEFAULT_WIDGETS, ...JSON.parse(saved) });
-      }
+      const savedProject = localStorage.getItem('qatrack_dashboard_widgets');
+      if (savedProject) setWidgets({ ...DEFAULT_WIDGETS, ...JSON.parse(savedProject) });
+
+      const savedProduct = localStorage.getItem('qatrack_product_dashboard_widgets');
+      if (savedProduct) setProductWidgets({ ...DEFAULT_PRODUCT_WIDGETS, ...JSON.parse(savedProduct) });
     } catch {
       // Ignore localStorage read errors
     }
@@ -105,7 +123,16 @@ function DashboardContent() {
     try {
       localStorage.setItem('qatrack_dashboard_widgets', JSON.stringify(updated));
     } catch {
-      // Ignore localStorage write errors
+      // Ignore
+    }
+  };
+
+  const handleSaveProductWidgets = (updated: ProductWidgetConfig) => {
+    setProductWidgets(updated);
+    try {
+      localStorage.setItem('qatrack_product_dashboard_widgets', JSON.stringify(updated));
+    } catch {
+      // Ignore
     }
   };
 
@@ -120,7 +147,7 @@ function DashboardContent() {
     setUser(currentUser);
 
     try {
-      const [reqs, execs, activeExecs, execsTrend, summary, componentCoverage, projs, jiraStatus] =
+      const [reqs, execs, activeExecs, execsTrend, summary, componentCoverage, projs, pStats, jiraStatus] =
         await Promise.all([
           fetchRequirements(),
           fetchExecutions(),
@@ -129,7 +156,8 @@ function DashboardContent() {
           fetchCoverageSummary(),
           fetchCoverageByComponent(),
           fetchProjects(),
-          fetchJiraStatus().catch(() => ({ connected: false })),
+          fetchProductStats().catch(() => null),
+          fetchJiraStatus().catch(() => ({ connected: false }) as JiraConnectionStatus),
         ]);
 
       setRequirements(reqs);
@@ -139,8 +167,8 @@ function DashboardContent() {
       setCoverageSummary(summary);
       setCoverageByComponent(componentCoverage);
       setProjects(projs);
+      setProductStats(pStats);
 
-      // Default to the first project when projects load for the first time
       setSelectedProjectKey((prev) => prev || projs[0]?.key || '');
 
       if (jiraStatus?.lastSyncedAt) {
@@ -150,8 +178,6 @@ function DashboardContent() {
             minute: '2-digit',
           }),
         );
-      } else {
-        setLastSynced('Never');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
@@ -200,18 +226,16 @@ function DashboardContent() {
     );
   }
 
-  // Filter requirements & defects by project and search query
   const filteredRequirements = requirements.filter((r) => {
     const matchesProject = !selectedProjectKey || r.jiraIssueKey.startsWith(`${selectedProjectKey}-`);
     const q = searchQuery.toLowerCase().trim();
-    const matchesQuery =
-      !q ||
-      r.jiraIssueKey.toLowerCase().includes(q) ||
-      r.title.toLowerCase().includes(q) ||
-      (r.component && r.component.toLowerCase().includes(q)) ||
-      (r.assignee && r.assignee.toLowerCase().includes(q));
-
-    return matchesProject && matchesQuery;
+    return (
+      matchesProject &&
+      (!q ||
+        r.jiraIssueKey.toLowerCase().includes(q) ||
+        r.title.toLowerCase().includes(q) ||
+        (r.component && r.component.toLowerCase().includes(q)))
+    );
   });
 
   const openDefects = filteredRequirements
@@ -222,8 +246,6 @@ function DashboardContent() {
     const q = searchQuery.toLowerCase().trim();
     return !q || e.suiteName.toLowerCase().includes(q) || e.id.toLowerCase().includes(q);
   });
-
-  const kpiStats = computeKpiStats(filteredRequirements, coverageSummary, activeExecutions);
 
   const hasVisibleWidgets =
     widgets.recentExecutions ||
@@ -245,23 +267,93 @@ function DashboardContent() {
         />
 
         <div className="p-gutter overflow-y-auto space-y-6 max-w-container-max mx-auto w-full">
-          {/* Page header */}
-          <div className="flex justify-between items-end">
-            <div>
-              <h1 className="font-headline-lg text-headline-lg text-on-surface">
-                QA Performance Dashboard
-              </h1>
+          {/* Page Header matching images 1 and 2 */}
+          <div className="flex justify-between items-end mb-4">
+            <div className="flex-col">
+              <h2 className="font-bold text-2xl md:text-3xl text-on-surface tracking-tight">
+                QA Dashboard
+              </h2>
+
+              <div className="mt-4 relative inline-block w-full max-w-[320px]">
+                <button
+                  type="button"
+                  onClick={() => setIsProductDropdownOpen((o) => !o)}
+                  className="w-full flex items-center justify-between px-4 py-2 bg-white border border-outline-variant rounded-lg shadow-sm cursor-pointer hover:bg-surface-container-low transition-colors"
+                >
+                  {selectedView === 'all' ? (
+                    <span className="text-body-md font-semibold text-on-surface">All products (overview)</span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-label-sm font-bold text-on-surface-variant/70 uppercase tracking-wider">PRODUCT:</span>
+                      <span className="text-body-md font-semibold text-on-surface">{selectedProduct.name}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-on-surface-variant">more_horiz</span>
+                    <span className="material-symbols-outlined text-on-surface-variant text-[18px]">
+                      {isProductDropdownOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                    </span>
+                  </div>
+                </button>
+
+                {isProductDropdownOpen && (
+                  <ul className="absolute top-full left-0 w-full mt-1 bg-white border border-outline-variant rounded-lg shadow-xl z-50 overflow-hidden py-1">
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedView('all');
+                          setIsProductDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 hover:bg-surface-container-low transition-colors text-body-md cursor-pointer ${
+                          selectedView === 'all' ? 'bg-primary-container text-on-primary-container font-semibold' : 'text-on-surface'
+                        }`}
+                      >
+                        All products (overview)
+                      </button>
+                    </li>
+                    {productOptions.map((item) => (
+                      <li key={item.key}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedView(item.key);
+                            setSelectedProduct(item);
+                            setIsProductDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 hover:bg-surface-container-low transition-colors text-body-md cursor-pointer ${
+                            selectedView === item.key ? 'bg-primary-container text-on-primary-container font-semibold' : 'text-on-surface'
+                          }`}
+                        >
+                          {item.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <p className="text-body-sm text-on-surface-variant/80 mt-1 max-w-2xl leading-relaxed">
+                This dashboard provides product-level metrics to communicate overall product quality and track testing progress for the selected product.
+              </p>
             </div>
+
             <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant bg-white text-on-surface rounded font-semibold text-body-sm hover:bg-surface-container-low transition-all shadow-sm active:scale-95 cursor-pointer"
+              onClick={() => {
+                if (selectedView === 'all') {
+                  setIsEditModalOpen(true);
+                } else {
+                  setIsProductEditModalOpen(true);
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant bg-white text-on-surface rounded font-semibold text-body-sm hover:bg-surface-container-low transition-all cursor-pointer shadow-xs"
             >
               <span className="material-symbols-outlined text-[18px]">edit_note</span>
               Edit Widgets
             </button>
           </div>
 
-          {/* Green Synced with Jira Banner (Auto-dismisses after 3s) */}
+          {/* Green Synced Banner */}
           {showSyncSuccess && (
             <div className="p-3 bg-secondary-container/30 border border-secondary/20 rounded-lg flex items-center justify-between animate-fade-in transition-all">
               <div className="flex items-center gap-3">
@@ -286,40 +378,60 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* Main grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {widgets.recentExecutions && <RecentExecutionsTable executions={filteredExecutions} />}
-            {widgets.coverageByComponent && <CoverageByComponent coverage={coverageByComponent} />}
-            {widgets.criticalDefects && <CriticalDefectsTable defects={openDefects} />}
-          </div>
-
-          {!hasVisibleWidgets && (
-            <div className="text-center py-16 bg-white border border-outline-variant rounded-xl p-8 space-y-3">
-              <span className="material-symbols-outlined text-[48px] text-on-surface-variant">
-                dashboard_customize
-              </span>
-              <h3 className="font-headline-sm text-headline-sm text-on-surface">No widgets currently visible</h3>
-              <p className="text-body-md text-on-surface-variant max-w-sm mx-auto">
-                All dashboard widgets are hidden. Click Edit Widgets below to choose what to display.
-              </p>
-              <button
-                onClick={() => setIsEditModalOpen(true)}
-                className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded font-semibold text-body-sm hover:opacity-90 active:scale-95 transition-all"
-              >
-                <span className="material-symbols-outlined text-[18px]">edit_note</span>
-                Edit Widgets
-              </button>
-            </div>
+          {/* Main Content */}
+          {selectedView === 'all' ? (
+            hasVisibleWidgets ? (
+              <ProjectLevelDashboard
+                executions={filteredExecutions}
+                coverageByComponent={coverageByComponent}
+                openDefects={openDefects}
+                widgets={widgets}
+              />
+            ) : (
+              <div className="text-center py-16 bg-white border border-outline-variant rounded-xl p-8 space-y-3">
+                <span className="material-symbols-outlined text-[48px] text-on-surface-variant">
+                  dashboard_customize
+                </span>
+                <h3 className="font-headline-sm text-headline-sm text-on-surface">No widgets currently visible</h3>
+                <p className="text-body-md text-on-surface-variant max-w-sm mx-auto">
+                  All dashboard widgets are hidden. Click Edit Widgets below to choose what to display.
+                </p>
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded font-semibold text-body-sm hover:opacity-90 active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[18px]">edit_note</span>
+                  Edit Widgets
+                </button>
+              </div>
+            )
+          ) : (
+            <ProductLevelDashboard
+              requirements={filteredRequirements}
+              coverageSummary={coverageSummary}
+              coverageByComponent={coverageByComponent}
+              executions={filteredExecutions}
+              widgets={productWidgets}
+              onOpenEditWidgets={() => setIsProductEditModalOpen(true)}
+            />
           )}
         </div>
       </main>
 
-      {/* Edit Widgets Modal */}
+      {/* Edit Widgets Modal (Overview Level) */}
       <EditWidgetsModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         widgets={widgets}
         onSave={handleSaveWidgets}
+      />
+
+      {/* Product Edit Widgets Modal */}
+      <ProductEditWidgetsModal
+        isOpen={isProductEditModalOpen}
+        onClose={() => setIsProductEditModalOpen(false)}
+        widgets={productWidgets}
+        onSave={handleSaveProductWidgets}
       />
     </div>
   );

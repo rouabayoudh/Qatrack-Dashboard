@@ -1,0 +1,64 @@
+{
+  "connections": [],
+  "sessions": [],
+  "requirements": [],
+  "userProjects": [],
+  "testCases": [
+    [
+      "jira-712020:4a856b35-d689-4b53-91f0-63c9cdb5d32a",
+      [
+        {
+          "id": "TC-1001",
+          "suiteId": "suite-1789565177865",
+          "title": "TC1",
+          "priority": "MEDIUM",
+          "type": "FUNCTIONAL",
+          "approvalStatus": "APPROVED",
+          "version": "v1",
+          "lastResult": "FAIL",
+          "updatedAt": "Just now"
+        }
+      ]
+    ]
+  ],
+  "traceLinks": [],
+  "defects": [
+    [
+      "jira-712020:4a856b35-d689-4b53-91f0-63c9cdb5d32a",
+      [
+        {
+          "id": "local-def-1789568313371",
+          "jiraKey": "QAT-103",
+          "summary": "testdefect1",
+          "severity": "HIGH",
+          "status": "OPEN",
+          "assignee": "Roue",
+          "projectKey": "QAT",
+          "createdAt": "2026-09-16T14:18:33.371Z"
+        },
+        {
+          "id": "local-def-1789567656520",
+          "jiraKey": "QAT-102",
+          "summary": "test defect",
+          "severity": "HIGH",
+          "status": "OPEN",
+          "assignee": "Roue",
+          "projectKey": "QAT",
+          "createdAt": "2026-09-16T14:07:36.520Z"
+        },
+        {
+          "id": "local-def-1789566960205",
+          "jiraKey": "QAT-101",
+          "summary": "[Execution Defect] TC-1001 - TC1",
+          "description": "Test Execution Failure Details:\n- Test Case ID: TC-1001\n- Title: TC1\n- Assignee: Roue\n- Result: FAIL\n\nExecution Notes:\nNo additional details provided.",
+          "severity": "HIGH",
+          "status": "CLOSED",
+          "assignee": "Roue",
+          "projectKey": "QAT",
+          "createdAt": "2026-09-16T13:56:00.205Z"
+        }
+      ]
+    ]
+  ],
+  "users": []
+}

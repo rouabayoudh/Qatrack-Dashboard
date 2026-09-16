@@ -35,3 +35,29 @@ export interface Project {
   key: string;   // Jira project key, e.g. "CLOUD"
   name: string;
 }
+
+export interface QualityHighlight {
+  type: 'good' | 'bad';
+  text: string;
+}
+
+export interface ProjectExecutionRow {
+  name: string;
+  tests: number;
+  status: 'Healthy' | 'At Risk' | 'Critical';
+  lastRun: string; // e.g. "2h ago"
+}
+
+export interface ProductDashboardStats {
+  lastPassRate: number;           // 0-100 %
+  passRateChange: number;         // signed delta e.g. +3.2
+  requirementCoverage: number;    // 0-100 %
+  coverageChange: number;         // signed delta
+  openDefects: number;
+  defectsTrend: string;           // e.g. "+2 this week"
+  flakyTests: number;
+  passRateTrend: number[];        // 5 weekly values (0-100)
+  coverageTrend: number[];        // 5 weekly values (0-100)
+  qualityHighlights: QualityHighlight[];
+  projectRows: ProjectExecutionRow[];
+}

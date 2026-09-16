@@ -39,6 +39,10 @@ export interface TestSuite {
   title: string;
   description: string;
   release?: string;
+  productModule?: string;
+  requireApproval?: boolean;
+  excludeUnapproved?: boolean;
+  executionStrategy?: string;
   testCases: TestCase[];
 }
 

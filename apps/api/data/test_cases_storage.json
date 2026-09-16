@@ -1,0 +1,49 @@
+{
+  "userSuites": [
+    [
+      "jira-712020:4a856b35-d689-4b53-91f0-63c9cdb5d32a",
+      [
+        {
+          "id": "suite-1789565177865",
+          "title": "Test suite",
+          "description": "",
+          "release": "ALL",
+          "productModule": "E-Commerce App / Checkout",
+          "requireApproval": true,
+          "excludeUnapproved": true,
+          "executionStrategy": "Sequential (Order by ID)",
+          "testCases": [
+            {
+              "id": "TC-1001",
+              "suiteId": "suite-1789565177865",
+              "title": "TC1",
+              "priority": "MEDIUM",
+              "type": "FUNCTIONAL",
+              "approvalStatus": "APPROVED",
+              "version": "v1",
+              "lastResult": "FAIL",
+              "updatedAt": "Just now"
+            },
+            {
+              "id": "TC-1002",
+              "suiteId": "suite-1789565177865",
+              "title": "TC2",
+              "priority": "MEDIUM",
+              "type": "FUNCTIONAL",
+              "approvalStatus": "APPROVED",
+              "version": "v1",
+              "lastResult": "PASS",
+              "updatedAt": "Just now"
+            }
+          ]
+        }
+      ]
+    ]
+  ],
+  "userStandaloneCases": [
+    [
+      "jira-712020:4a856b35-d689-4b53-91f0-63c9cdb5d32a",
+      []
+    ]
+  ]
+}

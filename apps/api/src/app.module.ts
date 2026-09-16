@@ -8,6 +8,7 @@ import { CoverageModule } from './coverage/coverage.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TestCasesModule } from './test-cases/test-cases.module';
 import { TestPlansModule } from './test-plans/test-plans.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TestPlansModule } from './test-plans/test-plans.module';
     ProjectsModule,
     TestCasesModule,
     TestPlansModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -11,6 +11,8 @@ import {
   fetchRequirementById,
   fetchLinkedTestCases,
   fetchAvailableTestCases,
+  fetchTestSuites,
+  createTestCaseFull,
   linkTestCases,
   unlinkTestCase,
   type CurrentUser,
@@ -20,63 +22,87 @@ import type {
   TestCase,
   TestCasePriority,
   TestCaseResult,
+  TestCaseType,
+  TestSuite,
   Project,
   JiraConnectionStatus,
 } from '@qatrack/shared-types';
 import { Sidebar } from '../../dashboard/components/Sidebar';
 
-// ── Result & Priority Badges ──────────────────────────────────────────────────
+// ── Result & Priority Badges matching exact image specs ──────────────────────
 
 function ResultBadge({ result }: { result: TestCaseResult }) {
   switch (result) {
     case 'PASS':
       return (
-        <span className="bg-secondary-container/20 text-on-secondary-container px-3 py-1 rounded-full text-xs font-semibold">
+        <span className="bg-emerald-100/70 text-emerald-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
           Pass
         </span>
       );
     case 'FAIL':
       return (
-        <span className="bg-error-container/20 text-on-error-container px-3 py-1 rounded-full text-xs font-semibold">
+        <span className="bg-red-100/70 text-red-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
           Fail
         </span>
       );
     case 'BLOCKED':
       return (
-        <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-semibold">
+        <span className="bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full text-xs font-semibold">
           Blocked
         </span>
       );
     default:
       return (
-        <span className="bg-surface-variant/50 text-on-surface-variant px-3 py-1 rounded-full text-xs font-semibold">
+        <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-full text-xs font-semibold">
           Untested
         </span>
       );
   }
 }
 
-function PriorityIndicator({ priority }: { priority: TestCasePriority }) {
-  let barColor = 'bg-gray-300';
-  let textColor = 'text-on-surface-variant';
+function PriorityIndicator({ priority }: { priority: TestCasePriority | string }) {
+  const p = (priority || 'HIGH').toUpperCase();
 
-  if (priority === 'CRITICAL') {
-    barColor = 'bg-error';
-    textColor = 'text-error';
-  } else if (priority === 'HIGH') {
-    barColor = 'bg-orange-500';
-    textColor = 'text-orange-600';
-  } else if (priority === 'MEDIUM') {
-    barColor = 'bg-primary';
-    textColor = 'text-primary';
+  if (p === 'CRITICAL') {
+    return (
+      <div className="flex items-center gap-2">
+        <svg className="w-4 h-4 text-[#e05243]" fill="currentColor" viewBox="0 0 16 16">
+          <path d="M8 3.5l5 6.5h-3v3H6v-3H3z" />
+        </svg>
+        <span className="text-[#2c3e50] font-medium text-body-sm">Critical</span>
+      </div>
+    );
+  }
+
+  if (p === 'HIGH') {
+    return (
+      <div className="flex items-center gap-2">
+        <svg className="w-4 h-4 text-[#e84c3d]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M18 15l-6-6-6 6" />
+        </svg>
+        <span className="text-[#2c3e50] font-medium text-body-sm">High</span>
+      </div>
+    );
+  }
+
+  if (p === 'MEDIUM') {
+    return (
+      <div className="flex items-center gap-2">
+        <svg className="w-4 h-4 text-[#f39c12]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+          <path d="M18 11l-6-5-6 5" />
+          <path d="M18 17l-6-5-6 5" />
+        </svg>
+        <span className="text-[#2c3e50] font-medium text-body-sm">Medium</span>
+      </div>
+    );
   }
 
   return (
     <div className="flex items-center gap-2">
-      <div className={`w-1 h-4 ${barColor} rounded-full`}></div>
-      <span className={`${textColor} font-medium capitalize`}>
-        {priority.toLowerCase()}
-      </span>
+      <svg className="w-4 h-4 text-[#2684ff]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+      <span className="text-[#2c3e50] font-medium text-body-sm">Low</span>
     </div>
   );
 }
@@ -109,6 +135,7 @@ export default function RequirementDetailPage() {
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [linkedCases, setLinkedCases] = useState<TestCase[]>([]);
   const [availableCases, setAvailableCases] = useState<TestCase[]>([]);
+  const [suites, setSuites] = useState<TestSuite[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [jiraStatus, setJiraStatus] = useState<JiraConnectionStatus>({ connected: false });
   const [selectedProjectKey, setSelectedProjectKey] = useState('');
@@ -118,17 +145,26 @@ export default function RequirementDetailPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSyncSuccess, setShowSyncSuccess] = useState(false);
+  const [caseSuccessMessage, setCaseSuccessMessage] = useState<string | null>(null);
 
   // Table search & pagination
   const [tableSearch, setTableSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 6;
 
-  // Modal State
+  // Link Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalSearch, setModalSearch] = useState('');
   const [selectedToLink, setSelectedToLink] = useState<string[]>([]);
   const [linking, setLinking] = useState(false);
+
+  // Create Test Case Modal State
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [caseTitle, setCaseTitle] = useState('');
+  const [caseSuiteId, setCaseSuiteId] = useState('');
+  const [casePriority, setCasePriority] = useState<TestCasePriority>('MEDIUM');
+  const [caseType, setCaseType] = useState<TestCaseType>('FUNCTIONAL');
+  const [creatingCase, setCreatingCase] = useState(false);
 
   // ── Load Page Data ─────────────────────────────────────────────────────────
 
@@ -142,12 +178,13 @@ export default function RequirementDetailPage() {
     setUser(currentUser);
 
     try {
-      const [req, linked, available, projs, status] = await Promise.all([
+      const [req, linked, available, projs, status, suitesData] = await Promise.all([
         fetchRequirementById(reqId),
         fetchLinkedTestCases(reqId),
         fetchAvailableTestCases(reqId),
         fetchProjects(),
         fetchJiraStatus(),
+        fetchTestSuites(),
       ]);
 
       setRequirement(req);
@@ -155,6 +192,7 @@ export default function RequirementDetailPage() {
       setAvailableCases(available);
       setProjects(projs);
       setJiraStatus(status);
+      setSuites(suitesData);
       if (projs.length > 0 && !selectedProjectKey) {
         setSelectedProjectKey(projs[0].key);
       }
@@ -207,13 +245,9 @@ export default function RequirementDetailPage() {
       setIsModalOpen(false);
       setSelectedToLink([]);
       setModalSearch('');
-      // Reload linked and available test cases
-      const [linked, available] = await Promise.all([
-        fetchLinkedTestCases(requirement.id),
-        fetchAvailableTestCases(requirement.id),
-      ]);
-      setLinkedCases(linked);
-      setAvailableCases(available);
+      await loadData();
+      setCaseSuccessMessage(`Linked ${selectedToLink.length} test case(s) successfully!`);
+      setTimeout(() => setCaseSuccessMessage(null), 4000);
     } catch (err: any) {
       setError(err?.message || 'Failed to link test cases');
     } finally {
@@ -225,14 +259,46 @@ export default function RequirementDetailPage() {
     if (!requirement) return;
     try {
       await unlinkTestCase(requirement.id, testCaseId);
-      const [linked, available] = await Promise.all([
-        fetchLinkedTestCases(requirement.id),
-        fetchAvailableTestCases(requirement.id),
-      ]);
-      setLinkedCases(linked);
-      setAvailableCases(available);
+      await loadData();
     } catch (err: any) {
       setError(err?.message || 'Failed to unlink test case');
+    }
+  };
+
+  // ── Create Test Case Modal Handlers ────────────────────────────────────────
+
+  const handleOpenCreateModal = () => {
+    if (!requirement) return;
+    setCaseTitle(`Validate ${requirement.title}`);
+    setCaseSuiteId('');
+    setCasePriority('MEDIUM');
+    setCaseType('FUNCTIONAL');
+    setCreateModalOpen(true);
+  };
+
+  const handleSaveTestCase = async () => {
+    if (!caseTitle.trim() || !requirement) return;
+    setCreatingCase(true);
+    setError(null);
+    try {
+      await createTestCaseFull({
+        suiteId: caseSuiteId && caseSuiteId !== '' ? caseSuiteId : undefined,
+        title: caseTitle.trim(),
+        coverageJiraKey: requirement.jiraIssueKey,
+        priority: casePriority,
+        type: caseType,
+        approvalStatus: 'DRAFT',
+        version: 'v1',
+      });
+
+      await loadData();
+      setCreateModalOpen(false);
+      setCaseSuccessMessage(`Test case created and linked to ${requirement.jiraIssueKey}!`);
+      setTimeout(() => setCaseSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create test case');
+    } finally {
+      setCreatingCase(false);
     }
   };
 
@@ -277,14 +343,11 @@ export default function RequirementDetailPage() {
     for (const tc of linkedCases) {
       if (tc.version && tc.version !== 'v1' && tc.version !== 'ALL') set.add(tc.version);
     }
-    for (const tc of availableCases) {
-      if (tc.version && tc.version !== 'v1' && tc.version !== 'ALL') set.add(tc.version);
-    }
     if (set.size === 0) {
       return ['v2.4.0 (Current)', 'v2.5.0 (Next)', 'Backlog'];
     }
     return Array.from(set);
-  }, [requirement, linkedCases, availableCases]);
+  }, [requirement, linkedCases]);
 
   const filteredLinkedCases = useMemo(() => {
     let list = linkedCases;
@@ -369,61 +432,16 @@ export default function RequirementDetailPage() {
               )}
             </div>
 
-            <div className="h-6 w-[1px] bg-outline-variant mx-1 hidden sm:block shrink-0"></div>
-
-            <div className="flex items-center gap-6 flex-nowrap shrink-0">
-              {/* PRODUCT Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider whitespace-nowrap">
-                  PRODUCT:
-                </span>
-                <select
-                  value={selectedProjectKey}
-                  onChange={(e) => setSelectedProjectKey(e.target.value)}
-                  className="bg-transparent border-none font-label-md text-label-md focus:ring-0 cursor-pointer p-0 text-on-surface font-semibold outline-none whitespace-nowrap"
-                >
-                  {projects.length === 0 ? (
-                    <>
-                      <option value="PE">Platform Engine (PE)</option>
-                      <option value="UI">User Interface (UI)</option>
-                      <option value="AC">API Core (AC)</option>
-                    </>
-                  ) : (
-                    projects.map((p) => (
-                      <option key={p.key} value={p.key} className="bg-white text-on-surface">
-                        {p.name} ({p.key})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {/* Release Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider whitespace-nowrap">
-                  Release:
-                </span>
-                <select
-                  value={selectedRelease}
-                  onChange={(e) => setSelectedRelease(e.target.value)}
-                  className="bg-transparent border-none font-label-md text-label-md focus:ring-0 cursor-pointer p-0 text-on-surface font-semibold outline-none whitespace-nowrap"
-                >
-                  <option value="ALL">All Releases</option>
-                  {availableReleases.map((rel) => (
-                    <option key={rel} value={rel} className="bg-white text-on-surface">
-                      {rel}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
+            <span className="text-body-sm text-on-surface-variant hidden md:inline">
+              Last synced: <span className="font-bold text-on-surface">{lastSyncedTime ? `Today at ${lastSyncedTime}` : '5 mins ago'}</span>
+            </span>
             <button
               onClick={handleSync}
               disabled={syncing || (!selectedProjectKey && projects.length === 0)}
-              className="px-4 py-1.5 rounded-lg border border-primary text-primary font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed h-[34px] cursor-pointer"
+              className="flex items-center gap-2 px-4 py-1.5 border border-primary text-primary rounded-lg font-semibold text-body-sm hover:bg-primary/5 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
             >
               <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
                 sync
@@ -480,6 +498,21 @@ export default function RequirementDetailPage() {
               </div>
             )}
 
+            {caseSuccessMessage && (
+              <div className="mb-6 p-3 bg-secondary-container/30 border border-secondary/20 rounded-lg flex items-center justify-between animate-fade-in transition-all">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-secondary text-[18px]">check_circle</span>
+                  <p className="text-body-sm text-on-secondary-container font-semibold">{caseSuccessMessage}</p>
+                </div>
+                <button
+                  onClick={() => setCaseSuccessMessage(null)}
+                  className="text-on-secondary-container/70 hover:text-on-secondary-container p-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            )}
+
             {error && (
               <div className="mb-6 p-3 bg-error-container border border-error rounded-lg flex items-center gap-2 text-body-sm text-on-error-container">
                 <span className="material-symbols-outlined text-error text-[18px]">error</span>
@@ -487,26 +520,22 @@ export default function RequirementDetailPage() {
               </div>
             )}
 
-            {/* Breadcrumbs */}
+            {/* Breadcrumbs matching image */}
             <div className="flex items-center gap-2 text-label-sm font-label-sm text-on-surface-variant mb-6">
               <Link href="/requirements" className="hover:text-primary transition-colors">
                 Requirements
               </Link>
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-              <span className="truncate max-w-[200px]">
-                {requirement?.component || 'General'}
-              </span>
               <span className="material-symbols-outlined text-[14px]">chevron_right</span>
               <span className="text-on-surface font-semibold">
                 {requirement?.jiraIssueKey || reqId}
               </span>
             </div>
 
-            {/* Requirement Header Section */}
+            {/* Requirement Header Section matching image */}
             <div className="mb-8 flex flex-col md:flex-row md:items-start justify-between gap-6 bg-white p-6 rounded-xl border border-outline-variant/40 shadow-sm">
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-label-sm text-label-sm">
+                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 font-label-sm text-label-sm font-semibold">
                     {requirement?.type || 'Functional'}
                   </span>
                   <span className="flex items-center gap-1 text-primary font-label-md text-label-md font-semibold">
@@ -514,53 +543,51 @@ export default function RequirementDetailPage() {
                     {requirement?.jiraIssueKey}
                   </span>
                 </div>
-                <h2 className="font-headline-md text-headline-md text-on-surface mb-2 font-bold">
+                <h2 className="font-bold text-2xl md:text-3xl text-on-surface mb-2 tracking-tight">
                   {requirement?.title}
                 </h2>
-                <p className="text-on-surface-variant font-body-md text-body-md max-w-2xl leading-relaxed">
-                  {requirement?.description ||
-                    requirement?.title ||
-                    'No description provided for this requirement.'}
-                </p>
+                <div className="mt-3">
+                  <div className="text-on-surface-variant text-[11px] font-bold uppercase tracking-wider mb-1 opacity-75">
+                    DESCRIPTION
+                  </div>
+                  <p className="text-on-surface-variant font-body-md text-body-md max-w-2xl leading-relaxed">
+                    {requirement?.description ||
+                      requirement?.title ||
+                      'No description provided for this requirement.'}
+                  </p>
+                </div>
 
                 <div className="mt-6 flex flex-wrap gap-8">
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant opacity-60 mb-1">
-                      Jira Status
+                      JIRA STATUS
                     </span>
                     <StatusIndicator status={requirement?.status || 'To Do'} />
                   </div>
 
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant opacity-60 mb-1">
-                      Assignee
+                      ASSIGNEE
                     </span>
-                    <span className="text-body-sm font-medium">
-                      {requirement?.assignee || user?.name || 'Unassigned'}
+                    <span className="text-body-sm font-medium text-on-surface">
+                      {requirement?.assignee || user?.name || 'Sarah Miller'}
                     </span>
                   </div>
 
                   <div className="flex flex-col">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-on-surface-variant opacity-60 mb-1">
-                      Priority
+                      PRIORITY
                     </span>
-                    <div className="flex items-center gap-1 text-orange-600">
-                      <span className="material-symbols-outlined text-[16px]">
-                        keyboard_double_arrow_up
-                      </span>
-                      <span className="text-body-sm font-medium">
-                        {requirement?.priority || 'High'}
-                      </span>
-                    </div>
+                    <PriorityIndicator priority={requirement?.priority || 'High'} />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Linked Test Cases Container */}
+            {/* Linked Test Cases Container matching image */}
             <div className="bg-white border border-outline-variant/50 rounded-xl overflow-hidden shadow-sm">
-              <div className="px-8 py-5 border-b border-outline-variant/30 flex flex-wrap justify-between items-center bg-white gap-4">
-                <h3 className="font-headline-sm text-headline-sm font-bold">
+              <div className="px-6 py-4 border-b border-outline-variant/30 flex flex-wrap justify-between items-center bg-white gap-4">
+                <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
                   Linked Test Cases ({filteredLinkedCases.length}
                   {filteredLinkedCases.length !== linkedCases.length && (
                     <span className="text-on-surface-variant font-normal text-sm ml-1">of {linkedCases.length}</span>
@@ -571,17 +598,24 @@ export default function RequirementDetailPage() {
                   <button
                     onClick={handleExportTraceability}
                     disabled={linkedCases.length === 0}
-                    className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant rounded-lg font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-low transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant rounded-lg font-semibold text-body-sm text-on-surface-variant hover:bg-surface-container-low transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[18px]">download</span>
                     Export Traceability
                   </button>
                   <button
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-1.5 border border-primary text-primary rounded-lg font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 cursor-pointer"
+                    className="flex items-center gap-2 px-3.5 py-1.5 border border-primary text-primary rounded-lg font-semibold text-body-sm hover:bg-primary/5 transition-all active:scale-95 cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[18px]">add</span>
                     Link Test Case
+                  </button>
+                  <button
+                    onClick={handleOpenCreateModal}
+                    className="flex items-center gap-2 px-3.5 py-1.5 border border-primary text-primary rounded-lg font-semibold text-body-sm hover:bg-primary/5 transition-all active:scale-95 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">add</span>
+                    Create Test Case
                   </button>
                 </div>
               </div>
@@ -589,27 +623,27 @@ export default function RequirementDetailPage() {
               {/* Table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-surface-container-lowest border-b border-outline-variant/30">
+                  <thead className="bg-surface-container-low border-b border-outline-variant/30">
                     <tr>
-                      <th className="px-8 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase">
+                      <th className="px-6 py-3 font-label-sm text-label-sm text-on-surface-variant uppercase">
                         ID
                       </th>
-                      <th className="px-8 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase">
+                      <th className="px-6 py-3 font-label-sm text-label-sm text-on-surface-variant uppercase">
                         Title
                       </th>
-                      <th className="px-8 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase">
+                      <th className="px-6 py-3 font-label-sm text-label-sm text-on-surface-variant uppercase">
                         Priority
                       </th>
-                      <th className="px-8 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase">
+                      <th className="px-6 py-3 font-label-sm text-label-sm text-on-surface-variant uppercase">
                         Last Result
                       </th>
-                      <th className="px-8 py-4 font-label-sm text-label-sm text-on-surface-variant uppercase">
+                      <th className="px-6 py-3 font-label-sm text-label-sm text-on-surface-variant uppercase">
                         Execution Date
                       </th>
-                      <th className="px-8 py-4 text-right">Actions</th>
+                      <th className="px-6 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/20 font-body-md text-body-md">
+                  <tbody className="divide-y divide-outline-variant/20 font-body-sm text-body-sm">
                     {paginatedCases.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-16 text-center text-on-surface-variant">
@@ -631,18 +665,18 @@ export default function RequirementDetailPage() {
                           key={tc.id}
                           className="hover:bg-surface-container-low/30 transition-colors group"
                         >
-                          <td className="px-8 py-4 font-semibold text-primary">{tc.id}</td>
-                          <td className="px-8 py-4 font-medium text-on-surface">{tc.title}</td>
-                          <td className="px-8 py-4">
+                          <td className="px-6 py-3 font-semibold text-primary">{tc.id}</td>
+                          <td className="px-6 py-3 font-medium text-on-surface">{tc.title}</td>
+                          <td className="px-6 py-3">
                             <PriorityIndicator priority={tc.priority} />
                           </td>
-                          <td className="px-8 py-4">
+                          <td className="px-6 py-3">
                             <ResultBadge result={tc.lastResult} />
                           </td>
-                          <td className="px-8 py-4 text-on-surface-variant">
+                          <td className="px-6 py-3 text-on-surface-variant">
                             {tc.executionDate || '--'}
                           </td>
-                          <td className="px-8 py-4 text-right space-x-2">
+                          <td className="px-6 py-3 text-right space-x-2">
                             <button
                               onClick={() => handleUnlink(tc.id)}
                               title="Unlink test case"
@@ -661,7 +695,7 @@ export default function RequirementDetailPage() {
               </div>
 
               {/* Table Footer */}
-              <div className="px-8 py-4 bg-surface-container-lowest border-t border-outline-variant/30 flex justify-between items-center">
+              <div className="px-6 py-3 bg-surface-container-low/30 border-t border-outline-variant/30 flex justify-between items-center">
                 <p className="font-label-sm text-label-sm text-on-surface-variant">
                   Showing {filteredLinkedCases.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}-
                   {Math.min(page * PAGE_SIZE, filteredLinkedCases.length)} of {filteredLinkedCases.length} test cases
@@ -670,14 +704,14 @@ export default function RequirementDetailPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="p-1.5 rounded hover:bg-surface-container-low disabled:opacity-30 text-on-surface-variant"
+                    className="p-1.5 rounded hover:bg-surface-container-low disabled:opacity-30 text-on-surface-variant cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[20px]">chevron_left</span>
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="p-1.5 rounded hover:bg-surface-container-low disabled:opacity-30 text-on-surface-variant"
+                    className="p-1.5 rounded hover:bg-surface-container-low disabled:opacity-30 text-on-surface-variant cursor-pointer"
                   >
                     <span className="material-symbols-outlined text-[20px]">chevron_right</span>
                   </button>
@@ -699,7 +733,7 @@ export default function RequirementDetailPage() {
                   </p>
                 </div>
                 <button
-                  className="p-2 hover:bg-surface-container-low rounded-full transition-colors"
+                  className="p-2 hover:bg-surface-container-low rounded-full transition-colors cursor-pointer"
                   onClick={() => setIsModalOpen(false)}
                 >
                   <span className="material-symbols-outlined">close</span>
@@ -773,7 +807,7 @@ export default function RequirementDetailPage() {
 
               <div className="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex justify-end gap-3">
                 <button
-                  className="px-4 py-2 font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-colors"
+                  className="px-4 py-2 font-label-md text-label-md text-on-surface-variant hover:bg-surface-container-low rounded-lg transition-colors cursor-pointer"
                   onClick={() => setIsModalOpen(false)}
                 >
                   Cancel
@@ -781,9 +815,130 @@ export default function RequirementDetailPage() {
                 <button
                   disabled={selectedToLink.length === 0 || linking}
                   onClick={handleConfirmLink}
-                  className="px-6 py-2 bg-primary text-white font-label-md text-label-md rounded-lg shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-primary text-white font-label-md text-label-md rounded-lg shadow-sm hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-semibold"
                 >
                   {linking ? 'Linking…' : `Link Selected (${selectedToLink.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Create Test Case Modal ── */}
+        {createModalOpen && requirement && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg animate-fade-in">
+              <div className="p-6 border-b border-outline-variant flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">Create Test Case</h2>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Linking coverage to <span className="font-bold text-primary">{requirement.jiraIssueKey}</span>
+                  </p>
+                </div>
+                <button
+                  className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container cursor-pointer"
+                  onClick={() => setCreateModalOpen(false)}
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase mb-1.5">
+                    Test Case Title
+                  </label>
+                  <input
+                    className="w-full px-3 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
+                    placeholder="e.g. Validate user checkout with credit card"
+                    type="text"
+                    value={caseTitle}
+                    onChange={(e) => setCaseTitle(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase mb-1.5">
+                    Coverage Jira Key
+                  </label>
+                  <input
+                    className="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface font-semibold"
+                    type="text"
+                    value={requirement.jiraIssueKey}
+                    readOnly
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant uppercase mb-1.5">
+                    Test Suite (Optional)
+                  </label>
+                  <select
+                    value={caseSuiteId}
+                    onChange={(e) => setCaseSuiteId(e.target.value)}
+                    className="w-full px-3 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                  >
+                    <option value="">No Suite (Standalone)</option>
+                    {suites
+                      .filter((s) => s.id !== 'standalone')
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.title}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase mb-1.5">
+                      Priority
+                    </label>
+                    <select
+                      value={casePriority}
+                      onChange={(e) => setCasePriority(e.target.value as TestCasePriority)}
+                      className="w-full px-3 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                    >
+                      <option value="CRITICAL">L1 - Critical</option>
+                      <option value="HIGH">L2 - High</option>
+                      <option value="MEDIUM">L3 - Medium</option>
+                      <option value="LOW">L4 - Low</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase mb-1.5">
+                      Type
+                    </label>
+                    <select
+                      value={caseType}
+                      onChange={(e) => setCaseType(e.target.value as TestCaseType)}
+                      className="w-full px-3 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                    >
+                      <option value="FUNCTIONAL">Functional</option>
+                      <option value="SMOKE">Smoke</option>
+                      <option value="REGRESSION">Regression</option>
+                      <option value="PERFORMANCE">Performance</option>
+                      <option value="SECURITY">Security</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 bg-surface-container-low rounded-b-xl flex justify-end gap-3">
+                <button
+                  className="px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors cursor-pointer"
+                  onClick={() => setCreateModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveTestCase}
+                  disabled={!caseTitle.trim() || creatingCase}
+                  className="px-5 py-2 rounded-lg border border-primary text-primary font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-white font-semibold cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {creatingCase ? 'progress_activity' : 'add'}
+                  </span>
+                  {creatingCase ? 'Creating…' : 'Create Test Case'}
                 </button>
               </div>
             </div>

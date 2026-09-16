@@ -32,12 +32,32 @@ export class TestCasesController {
   @Post('suites')
   createSuite(
     @Req() req: any,
-    @Body() body: { title: string; description: string; release?: string },
+    @Body()
+    body: {
+      title: string;
+      description: string;
+      release?: string;
+      productModule?: string;
+      requireApproval?: boolean;
+      excludeUnapproved?: boolean;
+      executionStrategy?: string;
+    },
   ) {
     if (!body.title) {
       throw new BadRequestException('Suite title is required');
     }
     return this.testCasesService.createSuite(req.user.sub, body);
+  }
+
+  @Put('suites/:id')
+  updateSuite(@Req() req: any, @Param('id') id: string, @Body() body: any) {
+    return this.testCasesService.updateSuite(req.user.sub, id, body);
+  }
+
+  @Delete('suites/:id')
+  deleteSuite(@Req() req: any, @Param('id') id: string) {
+    this.testCasesService.deleteSuite(req.user.sub, id);
+    return { success: true };
   }
 
   @Post()

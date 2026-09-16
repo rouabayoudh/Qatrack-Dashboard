@@ -1,0 +1,64 @@
+{
+  "retestCycles": [
+    {
+      "id": "CYC-882",
+      "name": "v2.4.0 Hotfix Regression",
+      "type": "REGRESSION",
+      "totalCases": 450,
+      "passedCases": 391,
+      "failedCases": 20,
+      "progress": 87,
+      "health": "IN_PROGRESS",
+      "owner": "Sarah Jenkins",
+      "startedAt": "2 hours ago"
+    },
+    {
+      "id": "CYC-881",
+      "name": "Stable Main Build Retest",
+      "type": "RETEST",
+      "totalCases": 1200,
+      "passedCases": 1200,
+      "failedCases": 20,
+      "progress": 100,
+      "health": "HEALTHY",
+      "owner": "Automation Runner",
+      "startedAt": "5 hours ago"
+    },
+    {
+      "id": "CYC-880",
+      "name": "Payment Gateway Regression",
+      "type": "REGRESSION",
+      "totalCases": 120,
+      "passedCases": 54,
+      "failedCases": 66,
+      "progress": 45,
+      "health": "CRITICAL",
+      "owner": "David Miller",
+      "startedAt": "1 day ago"
+    },
+    {
+      "id": "CYC-879",
+      "name": "UI Component Library Check",
+      "type": "RETEST",
+      "totalCases": 85,
+      "passedCases": 10,
+      "failedCases": 0,
+      "progress": 12,
+      "health": "IN_PROGRESS",
+      "owner": "Alex Thorne",
+      "startedAt": "Just now"
+    },
+    {
+      "id": "CYC-878",
+      "name": "Mobile App End-to-End",
+      "type": "REGRESSION",
+      "totalCases": 210,
+      "passedCases": 198,
+      "failedCases": 12,
+      "progress": 92,
+      "health": "HEALTHY",
+      "owner": "Sarah Jenkins",
+      "startedAt": "3 days ago"
+    }
+  ]
+}

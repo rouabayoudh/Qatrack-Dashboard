@@ -27,7 +27,7 @@ export function TopBar({
   const notifRef = useRef<HTMLDivElement>(null);
 
   const selectedProject = projects.find((p) => p.key === selectedProjectKey);
-  const displayLabel = selectedProject?.name ?? (projects.length === 0 ? 'No projects synced' : 'Select a project');
+  const displayLabel = selectedProject?.name ?? (projects.length === 0 ? 'Alpha Core' : 'Alpha Core');
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -45,20 +45,17 @@ export function TopBar({
 
   return (
     <header className="h-14 w-full sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm flex justify-between items-center px-gutter gap-4">
-      <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center gap-6">
         {/* Project picker dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => projects.length > 0 && setDropdownOpen((o) => !o)}
-            disabled={projects.length === 0}
-            className="flex items-center gap-2 px-3 py-1.5 bg-surface-container-low border border-outline-variant/30 rounded-lg hover:bg-surface-container transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center gap-2 px-3 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg hover:bg-surface-container transition-colors cursor-pointer"
           >
-            <span className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Project:</span>
-            <span className="text-body-sm font-semibold max-w-[180px] truncate text-on-surface">{displayLabel}</span>
-            <span className="material-symbols-outlined text-[18px] text-on-surface-variant">
-              {dropdownOpen ? 'expand_less' : 'expand_more'}
-            </span>
+            <span className="text-label-sm font-bold text-on-surface-variant/70 uppercase tracking-wider">PROJECT:</span>
+            <span className="text-body-sm font-semibold text-on-surface-variant">{displayLabel}</span>
+            <span className="material-symbols-outlined text-[18px] text-on-surface-variant">expand_more</span>
           </button>
 
           {dropdownOpen && projects.length > 0 && (
@@ -93,31 +90,33 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-4">
-        <span className="text-body-xs text-on-surface-variant text-[11px] hidden sm:inline">
-          Last synced: <span className="font-semibold text-on-surface">{lastSynced}</span>
-        </span>
-        <button
-          onClick={onSync}
-          disabled={syncing || (!selectedProjectKey && projects.length === 0)}
-          className="px-4 py-1.5 rounded-lg border border-primary text-primary font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed h-[34px] cursor-pointer"
-        >
-          <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
-            sync
+        <div className="flex items-center gap-4">
+          <span className="text-body-sm text-on-surface-variant">
+            Last synced: <span className="font-bold text-on-surface">{lastSynced}</span>
           </span>
-          {syncing ? 'Syncing…' : 'Sync with Jira'}
-        </button>
+          <button
+            onClick={onSync}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-1.5 border border-primary text-primary rounded-lg font-semibold text-body-sm hover:bg-primary/5 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+          >
+            <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
+              sync
+            </span>
+            {syncing ? 'Syncing…' : 'Sync with Jira'}
+          </button>
+        </div>
 
-        <div className="h-6 w-[1px] bg-outline-variant mx-1"></div>
+        <div className="w-px h-6 bg-outline-variant mx-2"></div>
 
-        <div className="relative flex items-center gap-1" ref={notifRef}>
+        <div className="flex items-center gap-1" ref={notifRef}>
           {/* Notifications */}
           <button
             onClick={() => setNotifOpen((prev) => !prev)}
             title="Notifications"
-            className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer relative"
+            className="p-2 text-on-surface-variant hover:text-primary transition-colors cursor-pointer active:scale-95 relative"
           >
             <span className="material-symbols-outlined">notifications</span>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-secondary rounded-full" />
+            <span className="absolute top-2 right-2 w-2 h-2 bg-secondary rounded-full border-2 border-white"></span>
           </button>
 
           {notifOpen && (
@@ -135,7 +134,7 @@ export function TopBar({
                 </div>
                 <div className="p-2 rounded bg-surface-container-low">
                   <p className="font-semibold text-xs text-on-surface">Active Jira Project</p>
-                  <p className="text-[11px] mt-0.5">{selectedProject ? `${selectedProject.name} (${selectedProject.key})` : 'Select a project to sync'}</p>
+                  <p className="text-[11px] mt-0.5">{selectedProject ? `${selectedProject.name} (${selectedProject.key})` : 'Alpha Core'}</p>
                 </div>
               </div>
             </div>
@@ -147,7 +146,7 @@ export function TopBar({
               window.location.href = '/dashboard';
             }}
             title="Dashboard Settings"
-            className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
+            className="p-2 text-on-surface-variant hover:text-primary transition-colors cursor-pointer active:scale-95"
           >
             <span className="material-symbols-outlined">settings</span>
           </button>
@@ -156,7 +155,7 @@ export function TopBar({
           <button
             onClick={() => setHelpOpen(true)}
             title="Help & Info"
-            className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
+            className="p-2 text-on-surface-variant hover:text-primary transition-colors cursor-pointer active:scale-95"
           >
             <span className="material-symbols-outlined">help_outline</span>
           </button>

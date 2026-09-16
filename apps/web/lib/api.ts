@@ -33,7 +33,20 @@ import type {
   ComponentCoverage,
   Project,
   JiraConnectionStatus,
+  ProductDashboardStats,
 } from '@qatrack/shared-types';
+
+export type {
+  Requirement,
+  TestExecution,
+  DailyTrend,
+  ActiveExecution,
+  CoverageSummary,
+  ComponentCoverage,
+  Project,
+  JiraConnectionStatus,
+  ProductDashboardStats,
+};
 
 export interface CurrentUser {
   id: string;
@@ -111,6 +124,21 @@ export async function fetchJiraStatus(): Promise<JiraConnectionStatus> {
   return fetchApi('/jira/status');
 }
 
+export async function connectJiraBasic(dto: {
+  email: string;
+  apiToken: string;
+  jiraDomain?: string;
+}): Promise<{ success: boolean; siteName: string; projects: Project[] }> {
+  return fetchApi('/jira/connect-basic', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function fetchProductStats(): Promise<ProductDashboardStats> {
+  return fetchApi('/executions/product-stats');
+}
+
 // ── Traceability ─────────────────────────────────────────────────────────────
 
 import type { TestCase, TestCasePriority } from '@qatrack/shared-types';
@@ -155,6 +183,18 @@ export async function fetchAllTestCases(): Promise<TestCase[]> {
   return fetchApi('/jira/test-cases');
 }
 
+export async function createJiraIssue(dto: {
+  projectKey?: string;
+  summary: string;
+  description?: string;
+  issueTypeName?: string;
+}): Promise<{ id: string; key: string } | null> {
+  return fetchApi('/jira/issues', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
 // ── Test Suites & Test Case Management ───────────────────────────────────────
 
 import type { TestSuite, TestApprovalStatus, TestCaseType } from '@qatrack/shared-types';
@@ -167,10 +207,27 @@ export async function createTestSuite(dto: {
   title: string;
   description: string;
   release?: string;
+  productModule?: string;
+  requireApproval?: boolean;
+  excludeUnapproved?: boolean;
+  executionStrategy?: string;
 }): Promise<TestSuite> {
   return fetchApi('/test-cases/suites', {
     method: 'POST',
     body: JSON.stringify(dto),
+  });
+}
+
+export async function updateTestSuite(id: string, updates: Partial<TestSuite>): Promise<TestSuite> {
+  return fetchApi(`/test-cases/suites/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteTestSuite(id: string): Promise<void> {
+  await fetchApi(`/test-cases/suites/${id}`, {
+    method: 'DELETE',
   });
 }
 
@@ -276,3 +333,183 @@ export async function updatePlanTestCaseResult(
 export async function deleteTestPlan(id: string): Promise<void> {
   await fetchApi(`/test-plans/${id}`, { method: 'DELETE' });
 }
+
+// ── Defects ────────────────────────────────────────────────────────────────
+
+export interface DefectRecord {
+  id: string;
+  jiraKey: string;
+  summary: string;
+  description?: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  status: 'OPEN' | 'IN_PROGRESS' | 'READY_FOR_RETEST' | 'CLOSED';
+  assignee?: string;
+  projectKey: string;
+  createdAt: string;
+  linkedTestCaseId?: string;
+}
+
+export async function fetchDefects(): Promise<DefectRecord[]> {
+  return fetchApi('/jira/defects');
+}
+
+export async function updateDefectStatus(
+  jiraKey: string,
+  status: DefectRecord['status'],
+): Promise<DefectRecord> {
+  return fetchApi(`/jira/defects/${jiraKey}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function createDefect(dto: {
+  summary: string;
+  description?: string;
+  severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  assignee?: string;
+  projectKey?: string;
+  linkedTestCaseId?: string;
+}): Promise<DefectRecord> {
+  return fetchApi('/jira/defects', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+// ── Admin Settings ─────────────────────────────────────────────────────────
+
+export interface WebhookRecord {
+  id: string;
+  name: string;
+  event: string;
+  endpoint: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export interface UserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'QA_LEAD' | 'TESTER' | 'VIEWER';
+  status: 'Active' | 'Inactive';
+  lastActive: string;
+}
+
+export interface AuditLogRecord {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+  ipAddress: string;
+}
+
+export interface GitLabConfig {
+  connected: boolean;
+  instanceUrl?: string;
+  lastSync?: string;
+}
+
+export async function syncJiraIssues(projectKey?: string): Promise<Requirement[]> {
+  const projects = await fetchProjects();
+  const key = projectKey || (projects.length > 0 ? projects[0].key : 'QAT');
+  return fetchApi('/jira/sync', {
+    method: 'POST',
+    body: JSON.stringify({ projectKey: key }),
+  });
+}
+
+export async function fetchWebhooks(): Promise<WebhookRecord[]> {
+  return fetchApi('/settings/webhooks');
+}
+
+export async function createWebhook(dto: { name: string; event: string }): Promise<WebhookRecord> {
+  return fetchApi('/settings/webhooks', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function toggleWebhook(id: string): Promise<WebhookRecord> {
+  return fetchApi(`/settings/webhooks/${id}/toggle`, {
+    method: 'PATCH',
+  });
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  await fetchApi(`/settings/webhooks/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchUsersList(): Promise<UserRecord[]> {
+  return fetchApi('/settings/users');
+}
+
+export async function updateUserRole(id: string, role: UserRecord['role']): Promise<UserRecord> {
+  return fetchApi(`/settings/users/${id}/role`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function fetchAuditLogs(): Promise<AuditLogRecord[]> {
+  return fetchApi('/settings/audit-logs');
+}
+
+export async function fetchGitLabConfig(): Promise<GitLabConfig> {
+  return fetchApi('/settings/gitlab');
+}
+
+export async function connectGitLab(instanceUrl: string): Promise<GitLabConfig> {
+  return fetchApi('/settings/gitlab/connect', {
+    method: 'POST',
+    body: JSON.stringify({ instanceUrl }),
+  });
+}
+
+export async function disconnectGitLab(): Promise<GitLabConfig> {
+  return fetchApi('/settings/gitlab/disconnect', {
+    method: 'POST',
+  });
+}
+
+// ── Retest & Regression ───────────────────────────────────────────────────
+
+export interface RetestCycle {
+  id: string;
+  name: string;
+  type: 'REGRESSION' | 'RETEST';
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+  progress: number;
+  health: 'HEALTHY' | 'CRITICAL' | 'AT_RISK' | 'IN_PROGRESS';
+  owner: string;
+  startedAt: string;
+}
+
+export async function fetchRetestCycles(): Promise<RetestCycle[]> {
+  return fetchApi('/executions/retest-cycles');
+}
+
+export async function createRetestCycle(dto: {
+  name: string;
+  type?: 'REGRESSION' | 'RETEST';
+  totalCases?: number;
+}): Promise<RetestCycle> {
+  return fetchApi('/executions/retest-cycles', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function triggerRetestCycle(id: string): Promise<RetestCycle> {
+  return fetchApi(`/executions/retest-cycles/${id}/run`, {
+    method: 'POST',
+  });
+}
+
+

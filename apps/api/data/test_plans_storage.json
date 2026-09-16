@@ -1,0 +1,26 @@
+{
+  "userPlans": [
+    [
+      "jira-712020:4a856b35-d689-4b53-91f0-63c9cdb5d32a",
+      [
+        {
+          "id": "PLAN-001",
+          "name": "test plan",
+          "release": "",
+          "environment": "UAT",
+          "status": "Not Started",
+          "sprint": "",
+          "estimatedHours": 24,
+          "suiteIds": [
+            "suite-1789565177865"
+          ],
+          "testCaseIds": [
+            "TC-1001",
+            "TC-1002"
+          ],
+          "createdAt": "2026-09-16T14:34:28.998Z"
+        }
+      ]
+    ]
+  ]
+}

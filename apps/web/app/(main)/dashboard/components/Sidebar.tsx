@@ -34,6 +34,7 @@ const NAV_SECTIONS: NavSection[] = [
     category: 'Execution',
     items: [
       { label: 'Executions', href: '/execution', icon: 'play_circle' },
+      { label: 'Retest & Regression', href: '/retest', icon: 'autorenew' },
       { label: 'Defects', href: '/defects', icon: 'bug_report' },
     ],
   },

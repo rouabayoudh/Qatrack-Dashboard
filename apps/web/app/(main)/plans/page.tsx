@@ -58,6 +58,8 @@ export default function TestPlansPage() {
   const [planEstHours, setPlanEstHours] = useState(24);
   const [selectedSuiteIds, setSelectedSuiteIds] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const [coverageSearch, setCoverageSearch] = useState('');
+  const [expandedSuitesModal, setExpandedSuitesModal] = useState<Record<string, boolean>>({});
 
   // ── Load Data ──────────────────────────────────────────────────────────────
 
@@ -195,14 +197,18 @@ export default function TestPlansPage() {
   // ── Dynamic Releases ───────────────────────────────────────────────────────
 
   const availableReleases = useMemo(() => {
+    const SENTINEL = 'Release (All)';
     const set = new Set<string>();
+    const addIfValid = (r: string) => {
+      if (r && r !== SENTINEL && r !== 'Unassigned') set.add(r);
+    };
     // From Jira synced data
-    jiraReleases.forEach((r) => set.add(r));
+    jiraReleases.forEach(addIfValid);
     // From plans themselves
-    plans.forEach((p) => p.release && set.add(p.release));
+    plans.forEach((p) => addIfValid(p.release ?? ''));
     // From suites
-    suites.forEach((s) => s.release && s.release !== 'Unassigned' && set.add(s.release));
-    return ['Release (All)', ...Array.from(set).sort()];
+    suites.forEach((s) => addIfValid(s.release ?? ''));
+    return [SENTINEL, ...Array.from(set).sort()];
   }, [plans, suites, jiraReleases]);
 
   // ── Filtering & Sorting ────────────────────────────────────────────────────
@@ -300,54 +306,6 @@ export default function TestPlansPage() {
                 </button>
               )}
             </div>
-
-            <div className="h-6 w-[1px] bg-outline-variant mx-1 hidden sm:block shrink-0"></div>
-
-            <div className="flex items-center gap-6 flex-nowrap shrink-0">
-              {/* PRODUCT Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider whitespace-nowrap">
-                  PRODUCT:
-                </span>
-                <select
-                  value={selectedProjectKey}
-                  onChange={(e) => setSelectedProjectKey(e.target.value)}
-                  className="bg-transparent border-none font-label-md text-label-md focus:ring-0 cursor-pointer p-0 text-on-surface font-semibold outline-none whitespace-nowrap"
-                >
-                  {projects.length === 0 ? (
-                    <>
-                      <option value="PE">Platform Engine (PE)</option>
-                      <option value="UI">User Interface (UI)</option>
-                      <option value="AC">API Core (AC)</option>
-                    </>
-                  ) : (
-                    projects.map((p) => (
-                      <option key={p.key} value={p.key} className="bg-white text-on-surface">
-                        {p.name} ({p.key})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {/* Release Selector */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider whitespace-nowrap">
-                  Release:
-                </span>
-                <select
-                  value={releaseFilter}
-                  onChange={(e) => setReleaseFilter(e.target.value)}
-                  className="bg-transparent border-none font-label-md text-label-md focus:ring-0 cursor-pointer p-0 text-on-surface font-semibold outline-none whitespace-nowrap"
-                >
-                  {availableReleases.map((rel) => (
-                    <option key={rel} value={rel} className="bg-white text-on-surface">
-                      {rel}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -384,7 +342,7 @@ export default function TestPlansPage() {
               </button>
               <button
                 onClick={() => {
-                  alert('QATrack Test Plans:\n\n• Search: Filter test plans by title, description, or release.\n• Product: Switch active Jira project.\n• Release: Filter plans by release version.\n• Sync: Synchronize with Jira.');
+                  alert('QATrack Test Plans:\n\n• Search: Filter test plans by title, description, or release.\n• Sync: Synchronize with Jira.');
                 }}
                 title="Help & Info"
                 className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
@@ -429,16 +387,46 @@ export default function TestPlansPage() {
             )}
 
             {/* Header */}
-            <div className="flex justify-between items-end mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
-                <h2 className="font-headline-lg text-headline-lg text-on-surface">Test Plans</h2>
-                <p className="text-on-surface-variant font-body-sm">
-                  Manage and monitor active testing cycles for Q3 Release.
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-on-surface">
+                    Test Plans
+                  </h1>
+                  {/* Product / Project Level selector pill matching user screenshot */}
+                  <div className="relative inline-flex items-center">
+                    <select
+                      value={selectedProjectKey}
+                      onChange={(e) => setSelectedProjectKey(e.target.value)}
+                      className="appearance-none bg-white border border-gray-200 text-primary font-semibold text-xs rounded-lg px-3 py-1.5 pr-8 shadow-sm hover:border-primary/50 focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer transition-all"
+                    >
+                      <option value="">Product: All Products</option>
+                      {projects.length === 0 ? (
+                        <>
+                          <option value="PE">Product: Platform Engine (PE)</option>
+                          <option value="UI">Product: User Interface (UI)</option>
+                          <option value="AC">Product: API Core (AC)</option>
+                        </>
+                      ) : (
+                        projects.map((p) => (
+                          <option key={p.key} value={p.key}>
+                            Product: {p.name} ({p.key})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                    <span className="material-symbols-outlined text-primary text-base absolute right-2 pointer-events-none">
+                      expand_more
+                    </span>
+                  </div>
+                </div>
+                <p className="text-on-surface-variant text-sm mt-1">
+                  Manage, execute, and track comprehensive test cycles and milestone verification across releases.
                 </p>
               </div>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="bg-primary text-on-primary h-10 px-5 rounded-lg font-label-md hover:shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                className="bg-primary text-on-primary h-10 px-5 rounded-lg font-label-md hover:shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 shrink-0"
               >
                 <span className="material-symbols-outlined text-lg">add</span>
                 Test Plan
@@ -456,8 +444,8 @@ export default function TestPlansPage() {
                   onChange={(e) => setReleaseFilter(e.target.value)}
                   className="bg-surface-container-low border-none rounded text-body-sm py-1.5 pl-3 pr-8 focus:ring-1 focus:ring-primary cursor-pointer text-on-surface outline-none"
                 >
-                  {availableReleases.map((rel) => (
-                    <option key={rel} value={rel}>
+                  {availableReleases.map((rel, index) => (
+                    <option key={`${rel}-${index}`} value={rel}>
                       {rel}
                     </option>
                   ))}
@@ -540,8 +528,8 @@ export default function TestPlansPage() {
                           )}
                         </div>
                         <button
-                          title="Run / Advance cycle"
-                          onClick={(e) => handleRunPlan(e, plan)}
+                          title="Run test cycle in Execution"
+                          onClick={(e) => { e.stopPropagation(); router.push('/execution'); }}
                           className="bg-primary text-on-primary w-9 h-9 rounded-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all ml-4 shrink-0 cursor-pointer shadow-sm"
                         >
                           <span className="material-symbols-outlined text-lg">play_arrow</span>
@@ -707,171 +695,316 @@ export default function TestPlansPage() {
         </div>
       </main>
 
-      {/* ── Create Test Plan Modal ── */}
+      {/* ── Create Test Plan Modal (Full Rich Spec Design) ── */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in duration-200 overflow-hidden">
-            <div className="p-6 border-b border-outline flex items-center justify-between">
-              <h2 className="text-lg font-bold">Create New Test Plan</h2>
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-[720px] max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300 my-auto">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-outline-variant flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary-fixed flex items-center justify-center text-primary shrink-0">
+                  <span className="material-symbols-outlined">event_note</span>
+                </div>
+                <div>
+                  <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                    Create Test Plan
+                  </h2>
+                  <p className="text-on-surface-variant text-[12px]">
+                    Define objectives, schedule, and scope for testing.
+                  </p>
+                </div>
+              </div>
               <button
-                className="text-neutral hover:text-on-surface cursor-pointer"
+                aria-label="Close modal"
+                className="w-8 h-8 rounded-full hover:bg-surface-container transition-colors flex items-center justify-center text-outline cursor-pointer"
                 onClick={() => setIsCreateModalOpen(false)}
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              <div>
-                <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                  Plan Name *
-                </label>
-                <input
-                  type="text"
-                  value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
-                  placeholder="e.g. Q3 Core Banking Regression"
-                  className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm"
-                  autoFocus
-                />
-              </div>
+            {/* Scrollable Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6 space-y-8 custom-scrollbar">
+              {/* Section 1: Plan Details */}
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-1 h-4 bg-primary rounded-full"></span>
+                  <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider font-bold">
+                    Plan Details
+                  </h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-body-sm font-medium text-on-surface-variant mb-1.5">
+                      Plan Name <span className="text-error">*</span>
+                    </label>
+                    <input
+                      className="w-full h-10 px-3 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                      placeholder="e.g., Q3 Regression - Payment Gateway"
+                      type="text"
+                      value={planName}
+                      onChange={(e) => setPlanName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-body-sm font-medium text-on-surface-variant mb-1.5">
+                        Release
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={planRelease}
+                          onChange={(e) => setPlanRelease(e.target.value)}
+                          className="w-full h-10 px-3 pr-10 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none appearance-none bg-white cursor-pointer"
+                        >
+                          <option value="">Select Release</option>
+                          {availableReleases.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">
+                          expand_more
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-body-sm font-medium text-on-surface-variant mb-1.5">
+                        Environment
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={planEnv}
+                          onChange={(e) => setPlanEnv(e.target.value as any)}
+                          className="w-full h-10 px-3 pr-10 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none appearance-none bg-white cursor-pointer"
+                        >
+                          <option value="UAT">UAT</option>
+                          <option value="Prod">Prod</option>
+                          <option value="SIT">SIT</option>
+                          <option value="Dev">Dev</option>
+                          <option value="Windows">Windows</option>
+                          <option value="Linux">Linux</option>
+                          <option value="macOS">macOS</option>
+                        </select>
+                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-outline pointer-events-none">
+                          expand_more
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-              <div>
-                <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                  Description
-                </label>
+              {/* Section 2: Schedule */}
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-1 h-4 bg-primary rounded-full"></span>
+                  <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider font-bold">
+                    Schedule
+                  </h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-body-sm font-medium text-on-surface-variant mb-1.5">
+                      Sprint Name
+                    </label>
+                    <input
+                      className="w-full h-10 px-3 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      placeholder="e.g., Sprint 45"
+                      type="text"
+                      value={planSprint}
+                      onChange={(e) => setPlanSprint(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-body-sm font-medium text-on-surface-variant mb-1.5">
+                      Estimation (Hours / Days)
+                    </label>
+                    <input
+                      className="w-full h-10 px-3 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                      min="1"
+                      placeholder="8"
+                      type="number"
+                      value={planEstHours}
+                      onChange={(e) => setPlanEstHours(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Section 3: Description */}
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="w-1 h-4 bg-primary rounded-full"></span>
+                  <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider font-bold">
+                    Description
+                  </h3>
+                </div>
                 <textarea
+                  className="w-full p-3 border border-outline-variant rounded-lg text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+                  placeholder="Briefly describe the scope of this test plan..."
+                  rows={4}
                   value={planDesc}
                   onChange={(e) => setPlanDesc(e.target.value)}
-                  placeholder="Goals, target coverage, and scope..."
-                  className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm h-20"
                 />
-              </div>
+              </section>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                    Release Version
-                  </label>
-                  {jiraReleases.length > 0 ? (
-                    <select
-                      value={planRelease}
-                      onChange={(e) => setPlanRelease(e.target.value)}
-                      className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm cursor-pointer"
-                    >
-                      <option value="">— Select a release —</option>
-                      {jiraReleases.map((rel) => (
-                        <option key={rel} value={rel}>{rel}</option>
-                      ))}
-                    </select>
+              {/* Section 4: Test Coverage */}
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="w-1 h-4 bg-primary rounded-full"></span>
+                    <h3 className="font-label-md text-label-md text-on-surface uppercase tracking-wider font-bold">
+                      Test Coverage
+                    </h3>
+                  </div>
+                  <div
+                    className={`px-2.5 py-1 rounded-full border transition-all ${
+                      selectedSuiteIds.length > 0
+                        ? 'bg-primary-fixed border-primary/40'
+                        : 'bg-surface-container border-primary/20'
+                    }`}
+                  >
+                    <span className="text-primary font-bold text-[11px] uppercase tracking-wide">
+                      {selectedSuiteIds.length > 0
+                        ? `${selectedSuiteIds.length} suite(s) selected`
+                        : '0 test cases selected'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Filter and Search */}
+                <div className="relative mb-3">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]">
+                    search
+                  </span>
+                  <input
+                    className="w-full h-9 pl-10 pr-4 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:ring-1 focus:ring-primary outline-none"
+                    placeholder="Filter suites or cases..."
+                    type="text"
+                    value={coverageSearch}
+                    onChange={(e) => setCoverageSearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Scrollable Suites Accordion List */}
+                <div className="border border-outline-variant rounded-lg overflow-hidden divide-y divide-outline-variant">
+                  {suites.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-on-surface-variant italic">
+                      No test suites available. Global test cases will be included automatically.
+                    </div>
                   ) : (
-                    <input
-                      type="text"
-                      value={planRelease}
-                      onChange={(e) => setPlanRelease(e.target.value)}
-                      placeholder="e.g. v2.4.0 (sync Jira to load versions)"
-                      className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm"
-                    />
+                    suites
+                      .filter((s) =>
+                        coverageSearch
+                          ? s.title.toLowerCase().includes(coverageSearch.toLowerCase()) ||
+                            s.testCases.some((tc) =>
+                              tc.title.toLowerCase().includes(coverageSearch.toLowerCase()),
+                            )
+                          : true,
+                      )
+                      .map((suite) => {
+                        const isSuiteSelected = selectedSuiteIds.includes(suite.id);
+                        const isExpanded = expandedSuitesModal[suite.id];
+                        return (
+                          <div key={suite.id} className="suite-container group">
+                            <div
+                              className="flex items-center justify-between p-3 bg-surface-container-low border-b border-outline-variant hover:bg-surface-container transition-colors cursor-pointer"
+                              onClick={() =>
+                                setExpandedSuitesModal((prev) => ({
+                                  ...prev,
+                                  [suite.id]: !prev[suite.id],
+                                }))
+                              }
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  className="w-4 h-4 rounded border-outline text-primary focus:ring-primary cursor-pointer"
+                                  type="checkbox"
+                                  checked={isSuiteSelected}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={() => {
+                                    setSelectedSuiteIds((prev) =>
+                                      prev.includes(suite.id)
+                                        ? prev.filter((id) => id !== suite.id)
+                                        : [...prev, suite.id],
+                                    );
+                                  }}
+                                />
+                                <span
+                                  className={`material-symbols-outlined text-outline transition-transform ${
+                                    isExpanded ? 'rotate-90' : ''
+                                  }`}
+                                >
+                                  chevron_right
+                                </span>
+                                <span className="font-medium text-body-md text-on-surface">
+                                  {suite.title}
+                                </span>
+                              </div>
+                              <span className="text-on-surface-variant text-[11px] font-medium bg-white px-2 py-0.5 rounded border border-outline-variant">
+                                {suite.testCases.length} Cases
+                              </span>
+                            </div>
+                            {isExpanded && (
+                              <div className="divide-y divide-outline-variant bg-surface-container-lowest">
+                                {suite.testCases.length === 0 ? (
+                                  <div className="px-10 py-2 text-xs text-on-surface-variant italic">
+                                    No test cases in this suite.
+                                  </div>
+                                ) : (
+                                  suite.testCases.map((tc, tcIndex) => (
+                                    <label
+                                      key={`modal-${suite.id}-${tc.id}-${tcIndex}`}
+                                      className="flex items-center gap-3 px-10 py-2.5 hover:bg-surface-container-low cursor-pointer group/item"
+                                    >
+                                      <input
+                                        className="case-checkbox w-4 h-4 rounded border-outline text-primary focus:ring-primary cursor-pointer"
+                                        type="checkbox"
+                                        checked={isSuiteSelected}
+                                        onChange={() => {
+                                          setSelectedSuiteIds((prev) =>
+                                            prev.includes(suite.id)
+                                              ? prev.filter((id) => id !== suite.id)
+                                              : [...prev, suite.id],
+                                          );
+                                        }}
+                                      />
+                                      <span className="text-body-sm text-on-surface-variant group-hover/item:text-on-surface transition-colors">
+                                        <span className="font-semibold text-primary mr-1">
+                                          {tc.id}:
+                                        </span>
+                                        {tc.title}
+                                      </span>
+                                    </label>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                    Environment
-                  </label>
-                  <select
-                    value={planEnv}
-                    onChange={(e) => setPlanEnv(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm cursor-pointer"
-                  >
-                    <option value="Prod">Prod</option>
-                    <option value="UAT">UAT</option>
-                    <option value="SIT">SIT</option>
-                    <option value="Dev">Dev</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                    Sprint Cycle
-                  </label>
-                  <input
-                    type="text"
-                    value={planSprint}
-                    onChange={(e) => setPlanSprint(e.target.value)}
-                    placeholder="Sprint 45"
-                    className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                    Estimated Hours
-                  </label>
-                  <input
-                    type="number"
-                    value={planEstHours}
-                    onChange={(e) => setPlanEstHours(Number(e.target.value))}
-                    min={1}
-                    className="w-full px-3 py-2 border border-outline rounded-lg focus:ring-2 focus:ring-primary text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-neutral uppercase mb-1.5">
-                  Select Included Test Suites
-                </label>
-                {suites.length === 0 ? (
-                  <p className="text-xs text-on-surface-variant italic">
-                    No suites available. Test cases from global pool will be linked.
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-36 overflow-y-auto border border-outline-variant rounded-lg p-2 custom-scrollbar">
-                    {suites.map((suite) => {
-                      const isSelected = selectedSuiteIds.includes(suite.id);
-                      return (
-                        <label
-                          key={suite.id}
-                          className="flex items-center gap-2 p-1.5 hover:bg-surface-container-low rounded cursor-pointer text-xs"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {
-                              setSelectedSuiteIds((prev) =>
-                                prev.includes(suite.id)
-                                  ? prev.filter((id) => id !== suite.id)
-                                  : [...prev, suite.id],
-                              );
-                            }}
-                            className="rounded border-outline text-primary focus:ring-primary"
-                          />
-                          <span className="font-semibold text-on-surface">{suite.title}</span>
-                          <span className="text-on-surface-variant ml-auto">
-                            ({suite.testCases.length} cases)
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              </section>
             </div>
 
-            <div className="p-6 bg-gray-50 rounded-b-xl flex justify-end gap-3 border-t border-outline-variant">
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-outline-variant bg-surface-container-lowest flex items-center justify-end gap-3 sticky bottom-0 shrink-0">
               <button
-                className="px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                className="px-5 h-10 border border-outline-variant text-on-surface-variant font-medium rounded-lg hover:bg-surface-container-low transition-colors cursor-pointer"
                 onClick={() => setIsCreateModalOpen(false)}
+                type="button"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreatePlan}
                 disabled={!planName.trim() || creating}
-                className="px-5 py-2 rounded-lg bg-primary text-white font-label-md text-label-md hover:bg-primary/90 transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="px-5 h-10 bg-primary text-white font-bold rounded-lg hover:bg-primary-container shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                type="button"
               >
                 <span className={`material-symbols-outlined text-[18px] ${creating ? 'animate-spin' : ''}`}>
                   {creating ? 'progress_activity' : 'add'}

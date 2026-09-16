@@ -108,6 +108,64 @@ export class JiraController {
     return this.jiraService.getAllTestCases(req.user.sub);
   }
 
+  /** POST /jira/issues — create a Jira issue / bug ticket */
+  @UseGuards(JwtAuthGuard)
+  @Post('issues')
+  async createIssue(
+    @Req() req: any,
+    @Body() body: { projectKey?: string; summary: string; description?: string; issueTypeName?: string },
+  ) {
+    if (!body.summary) throw new BadRequestException('summary is required');
+    const userId = req.user.sub;
+    const projectKey = body.projectKey || this.jiraService.getActiveProjectKey(userId) || 'QAT';
+    return this.jiraService.createJiraIssue(userId, {
+      projectKey,
+      summary: body.summary,
+      description: body.description,
+      issueTypeName: body.issueTypeName || 'Bug',
+    });
+  }
+
+  /** GET /jira/defects — list all stored defect records for the user */
+  @UseGuards(JwtAuthGuard)
+  @Get('defects')
+  getDefects(@Req() req: any) {
+    return this.jiraService.getDefects(req.user.sub);
+  }
+
+  /** POST /jira/defects — create a new defect record */
+  @UseGuards(JwtAuthGuard)
+  @Post('defects')
+  async createDefect(
+    @Req() req: any,
+    @Body() body: {
+      summary: string;
+      description?: string;
+      severity?: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+      assignee?: string;
+      projectKey?: string;
+      linkedTestCaseId?: string;
+    },
+  ) {
+    if (!body.summary) throw new BadRequestException('summary is required');
+    return this.jiraService.createDefect(req.user.sub, body);
+  }
+
+  /** PATCH /jira/defects/:key/status — update a defect status */
+  @UseGuards(JwtAuthGuard)
+  @Post('defects/:key/status')
+  updateDefectStatus(
+    @Req() req: any,
+    @Param('key') key: string,
+    @Body('status') status: string,
+  ) {
+    const valid = ['OPEN', 'IN_PROGRESS', 'READY_FOR_RETEST', 'CLOSED'];
+    if (!valid.includes(status)) throw new BadRequestException('Invalid status');
+    const result = this.jiraService.updateDefectStatus(req.user.sub, key, status as any);
+    if (!result) throw new BadRequestException(`Defect ${key} not found`);
+    return result;
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('projects')
   async getProjects(@Req() req: any) {
@@ -126,6 +184,36 @@ export class JiraController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('connect-basic')
+  async connectBasic(
+    @Req() req: any,
+    @Body() body: { email: string; apiToken: string; jiraDomain?: string },
+  ) {
+    if (!body.email || !body.apiToken) {
+      throw new BadRequestException('Email and Jira API Token are required');
+    }
+    const result = await this.jiraService.authenticateWithJira(
+      body.email,
+      body.apiToken,
+      body.jiraDomain,
+    );
+    // Associate the connection with the current logged-in user ID
+    const userId = req.user.sub;
+    const jiraHost = body.jiraDomain?.includes('.')
+      ? `https://${body.jiraDomain}`
+      : `https://${body.jiraDomain || 'jira'}.atlassian.net`;
+    const basicAuth = `Basic ${Buffer.from(`${body.email.trim()}:${body.apiToken.trim()}`).toString('base64')}`;
+
+    this.jiraService.connectBasic(userId, result.siteName, jiraHost, basicAuth);
+
+    const projects = await this.jiraService.fetchAndStoreProjects(userId).catch(() => []);
+    if (projects.length > 0) {
+      await this.jiraService.syncJiraIssues(userId, projects[0].key).catch(() => []);
+    }
+    return { success: true, siteName: result.siteName, projects };
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('sync')
   async sync(@Req() req: any, @Body('projectKey') projectKey: string) {
     if (!projectKey) {
@@ -135,7 +223,7 @@ export class JiraController {
     const status = this.jiraService.getConnectionStatus(userId);
     if (!status.connected) {
       throw new BadRequestException(
-        'Jira is not connected. Please log out and log in again via Jira OAuth.',
+        'Jira is not connected yet. Please click "Connect to Jira" to connect your account.',
       );
     }
     return this.jiraService.syncJiraIssues(userId, projectKey);
