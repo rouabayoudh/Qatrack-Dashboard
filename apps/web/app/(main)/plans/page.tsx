@@ -22,6 +22,7 @@ import type {
   JiraConnectionStatus,
 } from '@qatrack/shared-types';
 import { Sidebar } from '../dashboard/components/Sidebar';
+import { TopBar } from '../dashboard/components/TopBar';
 
 export default function TestPlansPage() {
   const router = useRouter();
@@ -282,76 +283,14 @@ export default function TestPlansPage() {
       <Sidebar user={user} />
 
       <main className="flex-1 flex flex-col min-w-0 bg-[#F9FAFB] relative overflow-hidden">
-        {/* ── TopNavBar - JSON Execution ── */}
-        <header className="h-14 w-full sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm flex justify-between items-center px-gutter gap-4 shrink-0">
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            {/* Search Input */}
-            <div className="relative w-64 md:w-80 shrink-0">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">
-                search
-              </span>
-              <input
-                className="w-full pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-on-surface"
-                placeholder="Search test plans..."
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface text-xs cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="text-body-xs text-on-surface-variant text-[11px] hidden sm:inline">
-              Last synced: <span className="font-semibold">{lastSyncedTime || 'Never'}</span>
-            </span>
-
-            {/* Outlined Sync Button matching Requirements & Test Cases */}
-            <button
-              onClick={handleSync}
-              disabled={syncing || (!selectedProjectKey && projects.length === 0)}
-              className="px-4 py-1.5 rounded-lg border border-primary text-primary font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed h-[34px] cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
-                sync
-              </span>
-              {syncing ? 'Syncing…' : 'Sync with Jira'}
-            </button>
-
-            <div className="h-6 w-[1px] bg-outline-variant mx-1"></div>
-
-            <div className="flex items-center gap-1">
-              <button
-                title="Notifications"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">notifications</span>
-              </button>
-              <button
-                title="Settings"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">settings</span>
-              </button>
-              <button
-                onClick={() => {
-                  alert('QATrack Test Plans:\n\n• Search: Filter test plans by title, description, or release.\n• Sync: Synchronize with Jira.');
-                }}
-                title="Help & Info"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">help_outline</span>
-              </button>
-            </div>
-          </div>
-        </header>
+        {/* Functional TopBar with working notifications, settings & help */}
+        <TopBar
+          projects={projects}
+          selectedProjectKey={selectedProjectKey}
+          onProjectChange={setSelectedProjectKey}
+          syncing={syncing}
+          onSync={handleSync}
+        />
 
         {/* ── Main Content Area ── */}
         <div className="flex-1 overflow-hidden flex bg-[#F9FAFB]">

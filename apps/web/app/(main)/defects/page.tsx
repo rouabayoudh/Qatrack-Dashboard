@@ -11,6 +11,7 @@ import {
   type DefectRecord,
 } from '@/lib/api';
 import { Sidebar } from '../dashboard/components/Sidebar';
+import { TopBar } from '../dashboard/components/TopBar';
 
 const SEVERITY_CONFIG = {
   CRITICAL: { label: 'Critical', color: '#BA1A1A', dot: '#BA1A1A' },
@@ -221,36 +222,8 @@ export default function DefectsPage() {
       <Sidebar user={user} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top NavBar */}
-        <header className="h-14 w-full sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm flex justify-between items-center px-4 gap-4 shrink-0">
-          <div className="flex items-center flex-1 min-w-0">
-            <div className="relative max-w-md w-full">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#737686] text-[14px]">
-                search
-              </span>
-              <input
-                type="text"
-                placeholder="Search Defects..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-9 pr-4 py-1.5 bg-[#EEF4FF] rounded-lg text-[13px] text-[#6B7280] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all border-none"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-px bg-outline-variant mx-1" />
-            <button className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]">notifications</span>
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]">settings</span>
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]">help_outline</span>
-            </button>
-          </div>
-        </header>
+        {/* Functional TopBar with working notifications, settings & help */}
+        <TopBar title="Defects" />
 
         {/* Main */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">

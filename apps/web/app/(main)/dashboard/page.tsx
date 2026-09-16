@@ -24,8 +24,10 @@ import {
   fetchProjects,
   fetchJiraStatus,
   fetchProductStats,
+  fetchDefects,
   fetchApi,
   type CurrentUser,
+  type DefectRecord,
 } from '@/lib/api';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -41,6 +43,7 @@ function DashboardContent() {
 
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [createdDefects, setCreatedDefects] = useState<DefectRecord[]>([]);
   const [executions, setExecutions] = useState<TestExecution[]>([]);
   const [activeExecutions, setActiveExecutions] = useState<ActiveExecution[]>([]);
   const [trend, setTrend] = useState<DailyTrend[]>([]);
@@ -147,7 +150,7 @@ function DashboardContent() {
     setUser(currentUser);
 
     try {
-      const [reqs, execs, activeExecs, execsTrend, summary, componentCoverage, projs, pStats, jiraStatus] =
+      const [reqs, execs, activeExecs, execsTrend, summary, componentCoverage, projs, pStats, jiraStatus, cDefects] =
         await Promise.all([
           fetchRequirements(),
           fetchExecutions(),
@@ -158,9 +161,11 @@ function DashboardContent() {
           fetchProjects(),
           fetchProductStats().catch(() => null),
           fetchJiraStatus().catch(() => ({ connected: false }) as JiraConnectionStatus),
+          fetchDefects().catch(() => []),
         ]);
 
       setRequirements(reqs);
+      setCreatedDefects(cDefects);
       setExecutions(execs);
       setActiveExecutions(activeExecs);
       setTrend(execsTrend);
@@ -238,9 +243,25 @@ function DashboardContent() {
     );
   });
 
-  const openDefects = filteredRequirements
-    .filter((r) => r.type === 'BUG' && !CLOSED_STATUSES.has(r.status ?? ''))
-    .slice(0, 10);
+  const mappedCreatedDefects: Requirement[] = createdDefects
+    .filter((d) => d.status !== 'CLOSED')
+    .map((d) => ({
+      id: d.id,
+      jiraIssueKey: d.jiraKey,
+      title: d.summary,
+      type: 'BUG' as const,
+      status: d.status,
+      priority: d.severity || 'HIGH',
+      component: d.projectKey || 'QAT',
+      assignee: d.assignee || 'Unassigned',
+    }));
+
+  const openBugsFromReqs = filteredRequirements.filter(
+    (r) => r.type === 'BUG' && !CLOSED_STATUSES.has(r.status ?? ''),
+  );
+
+  const openDefects = [...mappedCreatedDefects, ...openBugsFromReqs].slice(0, 10);
+  const allRequirementsWithDefects = [...mappedCreatedDefects, ...filteredRequirements];
 
   const filteredExecutions = executions.filter((e) => {
     const q = searchQuery.toLowerCase().trim();
@@ -407,7 +428,7 @@ function DashboardContent() {
             )
           ) : (
             <ProductLevelDashboard
-              requirements={filteredRequirements}
+              requirements={allRequirementsWithDefects}
               coverageSummary={coverageSummary}
               coverageByComponent={coverageByComponent}
               executions={filteredExecutions}

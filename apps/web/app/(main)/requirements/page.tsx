@@ -24,6 +24,7 @@ import type {
   TestCaseType,
 } from '@qatrack/shared-types';
 import { Sidebar } from '../dashboard/components/Sidebar';
+import { TopBar } from '../dashboard/components/TopBar';
 
 // ── Type icon helpers ──────────────────────────────────────────────────────────
 
@@ -271,10 +272,7 @@ export default function RequirementsPage() {
   });
   const [sortBy, setSortBy] = useState<'default' | 'key' | 'title' | 'priority'>('default');
 
-  // Notifications State
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [readNotifications, setReadNotifications] = useState<string[]>([]);
-  const notifRef = useRef<HTMLDivElement>(null);
+  // Notifications State (viewOptionsOpen remains for the filter bar View Options dropdown)
   const viewOptRef = useRef<HTMLDivElement>(null);
 
   // Pagination
@@ -303,9 +301,6 @@ export default function RequirementsPage() {
   // Close popovers on click outside
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotificationsOpen(false);
-      }
       if (viewOptRef.current && !viewOptRef.current.contains(e.target as Node)) {
         setViewOptionsOpen(false);
       }
@@ -313,6 +308,7 @@ export default function RequirementsPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
 
   // ── Load data ──────────────────────────────────────────────────────────────
 
@@ -622,113 +618,13 @@ export default function RequirementsPage() {
       <Sidebar user={user} />
 
       <main className="flex-1 flex flex-col min-w-0 bg-background relative">
-        {/* ── TopNavBar - JSON Execution ── */}
-        <header className="h-14 w-full sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm flex justify-between items-center px-gutter gap-4">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="relative max-w-md w-full">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">
-                search
-              </span>
-              <input
-                className="w-full pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                placeholder="Search requirements..."
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface text-xs cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              )}
-            </div>
-          </div>
+        {/* Functional TopBar with working notifications, settings & help */}
+        <TopBar syncing={syncing} onSync={handleSync} />
 
-          <div className="flex items-center gap-4">
-            <span className="text-body-sm text-on-surface-variant hidden md:inline">
-              Last synced: <span className="font-bold text-on-surface">{syncedAt ? `Today at ${syncedAt}` : '5 mins ago'}</span>
-            </span>
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex items-center gap-2 px-4 py-1.5 border border-primary text-primary rounded-lg font-semibold text-body-sm hover:bg-primary/5 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-            >
-              <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
-                sync
-              </span>
-              {syncing ? 'Syncing…' : 'Sync with Jira'}
-            </button>
 
-            <div className="flex items-center gap-1 border-l border-outline-variant pl-4" ref={notifRef}>
-              <button
-                onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="p-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer relative"
-                title="Notifications"
-              >
-                <span className="material-symbols-outlined">notifications</span>
-                {unreadNotifCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full ring-2 ring-white animate-pulse" />
-                )}
-              </button>
-
-              {notificationsOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-outline-variant rounded-xl shadow-2xl z-50 overflow-hidden text-sm">
-                  <div className="px-4 py-3 border-b border-outline-variant flex items-center justify-between bg-surface-container-lowest">
-                    <span className="font-headline-sm text-sm font-bold text-on-surface">Notifications</span>
-                    <button
-                      onClick={() => setReadNotifications(notificationsList.map((n) => n.id))}
-                      className="text-[11px] text-primary hover:underline font-semibold"
-                    >
-                      Mark all as read
-                    </button>
-                  </div>
-                  <div className="divide-y divide-outline-variant/40 max-h-72 overflow-y-auto">
-                    {notificationsList.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`p-3.5 hover:bg-surface-container-low transition-colors cursor-pointer ${
-                          !readNotifications.includes(n.id) ? 'bg-primary/5' : ''
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-bold text-xs text-on-surface">{n.title}</span>
-                          <span className="text-[10px] text-outline">{n.time}</span>
-                        </div>
-                        <p className="text-xs text-on-surface-variant leading-snug">{n.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => setViewOptionsOpen((prev) => !prev)}
-                title="Settings"
-                className="p-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">settings</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  alert('QATrack Requirements Management:\n\n• Search: Filter requirements by title, Jira key, or product.\n• Product: Switch active Jira project.\n• Sync with Jira: Fetch live requirements & traceability.');
-                }}
-                title="Help"
-                className="p-2 text-on-surface-variant hover:text-primary transition-colors active:scale-95 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">help_outline</span>
-              </button>
-            </div>
-          </div>
-        </header>
 
         {/* ── Page Content ── */}
+
         <div className="flex-1 flex flex-col p-6 overflow-hidden">
           {/* Green Synced Banner */}
           {showSyncSuccess && (

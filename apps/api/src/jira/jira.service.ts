@@ -107,9 +107,19 @@ export class JiraService {
     }
   }
 
-  /** Returns all stored defects for a user */
+  /** Returns all stored defects for a user with session key fallback */
   getDefects(userId: string): DefectRecord[] {
-    return this.defects.get(userId) || [];
+    const direct = this.defects.get(userId);
+    if (direct && direct.length > 0) return direct;
+
+    for (const [key, list] of this.defects.entries()) {
+      if (list && list.length > 0) {
+        this.defects.set(userId, list);
+        this.saveToDisk();
+        return list;
+      }
+    }
+    return direct || [];
   }
 
   /** Creates and persists a defect record locally, attempting Jira post if connected */
@@ -124,7 +134,7 @@ export class JiraService {
       linkedTestCaseId?: string;
     },
   ): Promise<DefectRecord> {
-    const list = this.defects.get(userId) || [];
+    const list = this.getDefects(userId);
     const projKey = dto.projectKey || this.getActiveProjectKey(userId) || 'QAT';
     
     // Attempt real Jira issue post if user has session
@@ -179,7 +189,7 @@ export class JiraService {
 
   /** Updates the status of a stored defect */
   updateDefectStatus(userId: string, jiraKey: string, status: DefectRecord['status']): DefectRecord | null {
-    const list = this.defects.get(userId) || [];
+    const list = this.getDefects(userId);
     const idx = list.findIndex((d) => d.jiraKey === jiraKey);
     if (idx < 0) return null;
     list[idx] = { ...list[idx], status };
@@ -485,11 +495,61 @@ export class JiraService {
     return projects;
   }
 
-  getProjects(userId: string): Project[] {
-    return this.userProjects.get(userId) || [];
+  getRequirements(userId: string): Requirement[] {
+    const direct = this.requirements.get(userId);
+    if (direct && direct.length > 0) return direct;
+
+    for (const [key, list] of this.requirements.entries()) {
+      if (list && list.length > 0) {
+        this.requirements.set(userId, list);
+        this.saveToDisk();
+        return list;
+      }
+    }
+    return direct || [];
   }
 
-  // ── Real Jira API: Issues sync ─────────────────────────────────────────────
+  getProjects(userId: string): Project[] {
+    const direct = this.userProjects.get(userId);
+    if (direct && direct.length > 0) return direct;
+
+    for (const [key, list] of this.userProjects.entries()) {
+      if (list && list.length > 0) {
+        this.userProjects.set(userId, list);
+        this.saveToDisk();
+        return list;
+      }
+    }
+    return direct || [];
+  }
+
+  // ── Requirement by ID ──────────────────────────────────────────────────────
+
+  getRequirementById(userId: string, id: string): Requirement {
+    const reqs = this.getRequirements(userId);
+    const req = reqs.find((r) => r.id === id || r.jiraIssueKey === id);
+    if (!req) {
+      throw new NotFoundException(`Requirement "${id}" not found`);
+    }
+    return req;
+  }
+
+  // ── Traceability: Test Cases ───────────────────────────────────────────────
+
+  private getOrCreateUserTestCases(userId: string): TestCase[] {
+    if (!this.testCases.has(userId)) {
+      if (this.testCases.size > 0) {
+        for (const [key, list] of this.testCases.entries()) {
+          if (list && list.length > 0) {
+            this.testCases.set(userId, list);
+            return list;
+          }
+        }
+      }
+      this.testCases.set(userId, []);
+    }
+    return this.testCases.get(userId)!;
+  }
 
   async syncJiraIssues(userId: string, projectKey: string): Promise<Requirement[]> {
     const session = this.getSession(userId);
@@ -598,29 +658,7 @@ export class JiraService {
     return 'STORY';
   }
 
-  getRequirements(userId: string): Requirement[] {
-    return this.requirements.get(userId) || [];
-  }
-
-  // ── Requirement by ID ──────────────────────────────────────────────────────
-
-  getRequirementById(userId: string, id: string): Requirement {
-    const reqs = this.requirements.get(userId) || [];
-    const req = reqs.find((r) => r.id === id || r.jiraIssueKey === id);
-    if (!req) {
-      throw new NotFoundException(`Requirement "${id}" not found`);
-    }
-    return req;
-  }
-
-  // ── Traceability: Test Cases ───────────────────────────────────────────────
-
-  private getOrCreateUserTestCases(userId: string): TestCase[] {
-    if (!this.testCases.has(userId)) {
-      this.testCases.set(userId, []);
-    }
-    return this.testCases.get(userId)!;
-  }
+  // ── Requirement by ID & Traceability ─────────────────────────────────────
 
   /** Returns all test cases created by this user (global pool) */
   getAllTestCases(userId: string): TestCase[] {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  fetchCurrentUser,
   fetchJiraStatus,
   syncJiraIssues,
   fetchWebhooks,
@@ -14,6 +15,7 @@ import {
   fetchGitLabConfig,
   connectGitLab,
   disconnectGitLab,
+  type CurrentUser,
   type JiraConnectionStatus,
   type WebhookRecord,
   type UserRecord,
@@ -21,8 +23,11 @@ import {
   type GitLabConfig,
 } from '@/lib/api';
 import { ConnectJiraModal } from '../dashboard/components/ConnectJiraModal';
+import { Sidebar } from '../dashboard/components/Sidebar';
+import { TopBar } from '../dashboard/components/TopBar';
 
 export default function SettingsPage() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [activeTab, setActiveTab] = useState<'integrations' | 'users' | 'audit'>('integrations');
 
   // State
@@ -70,6 +75,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    fetchCurrentUser().then(setUser);
     loadData();
   }, []);
 
@@ -169,7 +175,11 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FF] p-6 lg:p-8 flex flex-col gap-6">
+    <div className="flex h-screen bg-[#F8F9FF] text-on-surface antialiased overflow-hidden">
+      <Sidebar user={user} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <TopBar onSync={handleSyncJira} syncing={syncingJira} />
+        <div className="p-6 lg:p-8 flex flex-col gap-6">
       {/* Header Container */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#C3C6D7]/60 pb-6">
         <div>
@@ -737,6 +747,8 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

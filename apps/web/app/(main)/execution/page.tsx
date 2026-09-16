@@ -23,6 +23,7 @@ import type {
   JiraConnectionStatus,
 } from '@qatrack/shared-types';
 import { Sidebar } from '../dashboard/components/Sidebar';
+import { TopBar } from '../dashboard/components/TopBar';
 
 interface ExecutionRow {
   id: string;
@@ -360,74 +361,14 @@ export default function ExecutionPage() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header NavBar matching rest of application */}
-        <header className="h-14 w-full sticky top-0 z-50 bg-white border-b border-outline-variant shadow-sm flex justify-between items-center px-gutter gap-4 shrink-0">
-          {/* Search Input Container */}
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            <div className="relative w-64 md:w-80 shrink-0">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">
-                search
-              </span>
-              <input
-                className="w-full pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-on-surface"
-                placeholder="Search test runs or IDs..."
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface text-xs cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-4">
-            <span className="text-body-xs text-on-surface-variant text-[11px] hidden sm:inline">
-              Last synced: <span className="font-semibold">{lastSyncedTime || 'Never'}</span>
-            </span>
-
-            {/* Outlined Sync Button matching Requirements, Test Cases & Test Plans */}
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="px-4 py-1.5 rounded-lg border border-primary text-primary font-label-md text-label-md hover:bg-primary/5 transition-all active:scale-95 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed h-[34px] cursor-pointer"
-            >
-              <span className={`material-symbols-outlined text-[18px] ${syncing ? 'animate-spin' : ''}`}>
-                sync
-              </span>
-              {syncing ? 'Syncing…' : 'Sync with Jira'}
-            </button>
-
-            <div className="h-6 w-[1px] bg-outline-variant mx-1" />
-
-            <div className="flex items-center gap-1">
-              <button
-                title="Notifications"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined">notifications</span>
-              </button>
-              <button
-                title="Settings"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined">settings</span>
-              </button>
-              <button
-                title="Help & Info"
-                className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined">help_outline</span>
-              </button>
-            </div>
-          </div>
-        </header>
+        {/* Functional TopBar with working notifications, settings & help */}
+        <TopBar
+          projects={projects}
+          selectedProjectKey={selectedProjectKey}
+          onProjectChange={setSelectedProjectKey}
+          syncing={syncing}
+          onSync={handleSync}
+        />
 
         {/* Execution Dashboard Body */}
         <div className="flex-1 overflow-hidden flex bg-[#F9FAFB]">
