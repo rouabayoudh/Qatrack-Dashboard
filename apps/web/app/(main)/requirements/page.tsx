@@ -480,25 +480,6 @@ export default function RequirementsPage() {
     ).length;
   }, [requirements]);
 
-  const notificationsList = useMemo(() => {
-    return [
-      {
-        id: 'notif-1',
-        title: 'Jira Sync Status',
-        desc: jiraStatus.lastSyncedAt
-          ? `Last synchronized at ${new Date(jiraStatus.lastSyncedAt).toLocaleTimeString()}`
-          : 'Ready to synchronize with Jira.',
-        time: 'Recent',
-      },
-      {
-        id: 'notif-2',
-        title: 'Requirement Coverage Alert',
-        desc: `${uncoveredCount} requirement${uncoveredCount !== 1 ? 's' : ''} currently uncovered.`,
-        time: 'Live',
-      },
-    ];
-  }, [jiraStatus, uncoveredCount]);
-
   const availableReleases = useMemo(() => {
     const set = new Set<string>();
     for (const r of requirements) {
@@ -509,8 +490,6 @@ export default function RequirementsPage() {
     }
     return Array.from(set);
   }, [requirements]);
-
-  const unreadNotifCount = notificationsList.filter((n) => !readNotifications.includes(n.id)).length;
 
   // ── Filtering & Sorting ────────────────────────────────────────────────────
 

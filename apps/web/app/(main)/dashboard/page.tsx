@@ -268,6 +268,35 @@ function DashboardContent() {
     return !q || e.suiteName.toLowerCase().includes(q) || e.id.toLowerCase().includes(q);
   });
 
+  const effectiveCoverageByComponent: ComponentCoverage[] = useMemo(() => {
+    if (coverageByComponent && coverageByComponent.length > 0) {
+      return coverageByComponent;
+    }
+    if (requirements.length > 0) {
+      const groups: Record<string, { total: number; verified: number }> = {};
+      for (const req of requirements) {
+        const projKey = req.jiraIssueKey ? req.jiraIssueKey.split('-')[0] : 'QATrack Core';
+        const comp = req.component || projKey || 'Core Module';
+        if (!groups[comp]) groups[comp] = { total: 0, verified: 0 };
+        groups[comp].total += 1;
+        if (CLOSED_STATUSES.has(req.status ?? '')) {
+          groups[comp].verified += 1;
+        }
+      }
+      return Object.entries(groups).map(([component, stats]) => ({
+        component,
+        coveragePercent: stats.total > 0 ? Math.round((stats.verified / stats.total) * 100) : 0,
+      }));
+    }
+    if (projects.length > 0) {
+      return projects.map((p) => ({
+        component: p.name || p.key,
+        coveragePercent: 0,
+      }));
+    }
+    return [];
+  }, [coverageByComponent, requirements, projects]);
+
   const hasVisibleWidgets =
     widgets.recentExecutions ||
     widgets.coverageByComponent ||
@@ -404,7 +433,7 @@ function DashboardContent() {
             hasVisibleWidgets ? (
               <ProjectLevelDashboard
                 executions={filteredExecutions}
-                coverageByComponent={coverageByComponent}
+                coverageByComponent={effectiveCoverageByComponent}
                 openDefects={openDefects}
                 widgets={widgets}
               />
@@ -430,7 +459,7 @@ function DashboardContent() {
             <ProductLevelDashboard
               requirements={allRequirementsWithDefects}
               coverageSummary={coverageSummary}
-              coverageByComponent={coverageByComponent}
+              coverageByComponent={effectiveCoverageByComponent}
               executions={filteredExecutions}
               widgets={productWidgets}
               onOpenEditWidgets={() => setIsProductEditModalOpen(true)}

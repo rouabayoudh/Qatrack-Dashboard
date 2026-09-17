@@ -33,20 +33,29 @@ export class CoverageService {
   }
 
   /**
-   * Returns coverage percentage grouped by component.
-   * Requirements without a component fall under "Uncategorized".
-   * Returns an empty array when no requirements have been synced from Jira yet.
+   * Returns coverage percentage grouped by component or product.
+   * If requirements don't have an explicit component, uses the Jira Project Key.
    */
   getByComponent(userId: string): ComponentCoverage[] {
     const requirements = this.jiraService.getRequirements(userId);
+    const projects = this.jiraService.getProjects(userId);
+
     if (!requirements || requirements.length === 0) {
+      // If projects exist but no issues have been synced yet, list projects with 0% coverage
+      if (projects && projects.length > 0) {
+        return projects.map((p) => ({
+          component: p.name || p.key,
+          coveragePercent: 0,
+        }));
+      }
       return [];
     }
 
-    // Group by component
+    // Group by component or project
     const groups: Record<string, Requirement[]> = {};
     for (const req of requirements) {
-      const comp = req.component || 'Uncategorized';
+      const projKey = req.jiraIssueKey ? req.jiraIssueKey.split('-')[0] : 'QATrack Core';
+      const comp = req.component || projKey || 'Core Module';
       if (!groups[comp]) {
         groups[comp] = [];
       }
@@ -54,12 +63,14 @@ export class CoverageService {
     }
 
     // Calculate coverage percent per component
-    return Object.entries(groups).map(([component, reqs]) => {
+    const result = Object.entries(groups).map(([component, reqs]) => {
       const verifiedCount = reqs.filter((r) =>
         ['Done', 'Closed', 'Resolved'].includes(r.status),
       ).length;
       const coveragePercent = Math.round((verifiedCount / reqs.length) * 100);
       return { component, coveragePercent };
     });
+
+    return result;
   }
 }

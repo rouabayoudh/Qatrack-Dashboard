@@ -10,11 +10,13 @@ export class CoverageController {
 
   @Get('summary')
   getSummary(@Req() req: any): CoverageSummary {
-    return this.coverageService.getSummary(req.user.sub);
+    const userId = req.user?.sub || req.user?.id || req.user?.userId || '';
+    return this.coverageService.getSummary(userId);
   }
 
   @Get('by-component')
   getByComponent(@Req() req: any): ComponentCoverage[] {
-    return this.coverageService.getByComponent(req.user.sub);
+    const userId = req.user?.sub || req.user?.id || req.user?.userId || '';
+    return this.coverageService.getByComponent(userId);
   }
 }
