@@ -220,17 +220,6 @@ function DashboardContent() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="flex items-center gap-3 text-on-surface-variant">
-          <span className="material-symbols-outlined animate-spin">progress_activity</span>
-          Loading dashboard…
-        </div>
-      </div>
-    );
-  }
-
   const filteredRequirements = requirements.filter((r) => {
     const matchesProject = !selectedProjectKey || r.jiraIssueKey.startsWith(`${selectedProjectKey}-`);
     const q = searchQuery.toLowerCase().trim();
@@ -301,6 +290,17 @@ function DashboardContent() {
     widgets.recentExecutions ||
     widgets.coverageByComponent ||
     widgets.criticalDefects;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <div className="flex items-center gap-3 text-on-surface-variant">
+          <span className="material-symbols-outlined animate-spin">progress_activity</span>
+          Loading dashboard…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-surface text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container">
